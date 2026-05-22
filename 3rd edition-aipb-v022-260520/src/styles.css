@@ -1,0 +1,119 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-brand: var(--brand);
+  --color-brand-sub: var(--brand-sub);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui, "Apple SD Gothic Neo", sans-serif;
+}
+
+:root {
+  --radius: 0.875rem;
+
+  --background: #FFFFFF;
+  --foreground: oklch(0.18 0.01 260);
+
+  --surface: #FFFFFF;
+  --surface-muted: #E9EFFE;
+
+  --card: #FFFFFF;
+  --card-foreground: oklch(0.18 0.01 260);
+  --popover: #FFFFFF;
+  --popover-foreground: oklch(0.18 0.01 260);
+
+  --primary: #606CF2;
+  --primary-foreground: #FFFFFF;
+  --secondary: oklch(0.965 0.005 260);
+  --secondary-foreground: oklch(0.22 0.02 260);
+  --muted: oklch(0.965 0.005 260);
+  --muted-foreground: oklch(0.52 0.015 260);
+  --accent: #EEF0FF;
+  --accent-foreground: #2D55C5;
+
+  --destructive: #E22D72;
+  --destructive-foreground: #FFFFFF;
+
+  --border: oklch(0.93 0.005 260);
+  --input: oklch(0.93 0.005 260);
+  --ring: #606CF2;
+
+  /* brand */
+  --brand: #606CF2;          /* 메인 */
+  --brand-sub: #7D4DDD;      /* 서브 */
+  --gradient-point: linear-gradient(135deg, #5EBDCD 0%, #7E81FF 50%, #E4A3BE 100%);
+
+  /* status — good/positive (호재, 상승) */
+  --pos: #E22D72;
+  --pos-soft: #FFF4FA;
+  --up: #E22D72;
+
+  /* status — bad/negative (악재, 하락) */
+  --neg: #2D55C5;
+  --neg-soft: #EEF5FF;
+  --down: #2D55C5;
+
+  --warn: oklch(0.72 0.15 70);
+  --info: #606CF2;
+  --info-soft: #EEF0FF;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html, body {
+    background-color: var(--color-surface-muted);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+
+  /* Vaul drawer fade-out animation — slower close feel */
+  [data-vaul-drawer] {
+    transition-duration: 0.8s !important;
+    animation-duration: 0.8s !important;
+  }
+  [data-vaul-overlay] {
+    transition-duration: 0.8s !important;
+    animation-duration: 0.8s !important;
+  }
+}
