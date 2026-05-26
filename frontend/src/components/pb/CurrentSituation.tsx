@@ -180,6 +180,7 @@ function Section({ emoji, title, subtitle, children }: { emoji: string; title: s
 
 export function CurrentSituation() {
   const navigate = useNavigate();
+  const { holdings, markets, schedules, loading } = useCurrentSituationData();
   const [activeHolding, setActiveHolding] = useState<"samsung" | "kcgi" | "plusk" | "kakao" | "kodex" | "els" | null>(null);
   const [openOil, setOpenOil] = useState(false);
   const [openDefense, setOpenDefense] = useState(false);

@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { useState } from "react";
 import { MasterInsightDialog } from "./MasterInsightDialog";
+import { useTopInvestors } from "@/hooks/useApiData";
 
 type Master = {
   rank: number;
@@ -10,43 +11,18 @@ type Master = {
   tags: string[];
 };
 
-const masters: Master[] = [
-  {
-    rank: 1,
-    emoji: "🔥",
-    name: "공격형 주식고수",
-    status:
-      "대형 IT 기업에 대한 투자 비중을 확대, 국내 증시 강세로 높은 수익을 보이고 있어요",
-    tags: ["대형 IT 기업 강세", "변동성 장세 기회 활용"],
-  },
-  {
-    rank: 2,
-    emoji: "💎",
-    name: "장기형 주식고수",
-    status:
-      "대형 우량주에 대한 투자 비중을 확대, 시장 불확실성 속 안정적 수익을 추구하고 있어요",
-    tags: ["대형 우량주 중심", "장기 투자 확대"],
-  },
-  {
-    rank: 3,
-    emoji: "🔍",
-    name: "분석형 주식고수",
-    status:
-      "실적 개선 기업에 집중하며 단기 변동성을 활용한 매매로 수익을 보이고 있어요",
-    tags: ["실적 개선 기업", "변동성 장세 수익"],
-  },
-  {
-    rank: 4,
-    emoji: "📊",
-    name: "금융상품 고수",
-    status:
-      "채권형 ETF와 배당주 펀드 비중을 늘려 변동성을 방어하고 있어요",
-    tags: ["채권형 ETF 확대", "배당주 펀드 선호"],
-  },
-];
-
 export function MasterInsight() {
   const [open, setOpen] = useState(false);
+  const { data, loading } = useTopInvestors(4);
+
+  const masters: Master[] = (data?.investors ?? []).map((inv: any) => ({
+    rank: Number(inv.rank),
+    emoji: inv.investor_emoji ?? '📊',
+    name: `${inv.investor_type} 고수`,
+    status: inv.short_status ?? '',
+    tags: inv.tags_json ? JSON.parse(inv.tags_json) : [],
+  }));
+
   return (
     <div className="px-5 pb-6">
       <div className="bg-card rounded-2xl border border-border/70 p-5">
@@ -55,6 +31,9 @@ export function MasterInsight() {
           <br />투자고수는?
         </p>
 
+        {loading ? (
+          <p className="mt-4 text-[13px] text-muted-foreground">불러오는 중...</p>
+        ) : (
         <ul className="mt-4 space-y-2.5">
           {masters.map((m) => (
             <li

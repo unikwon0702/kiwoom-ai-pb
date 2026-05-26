@@ -2,23 +2,18 @@ import { ArrowUpRight } from "lucide-react";
 import { useState } from "react";
 import { HormuzOpportunityDialog } from "./HormuzOpportunityDialog";
 import { ChinaTourismOpportunityDialog } from "./ChinaTourismOpportunityDialog";
-
-const items = [
-  {
-    tag: "해상 운송 데이터",
-    title: "호르무즈 해협이 막히면, 의외로 웃는 한국 기업은?",
-    key: "hormuz",
-  },
-  {
-    tag: "소비 트렌드",
-    title: "유커 돌아온대요. 백화점 말고 오를 곳은 따로 있어요",
-    key: "china",
-  },
-];
+import { useUnexpectedSignals } from "@/hooks/useApiData";
 
 export function UnexpectedSignal() {
   const [hormuzOpen, setHormuzOpen] = useState(false);
   const [chinaOpen, setChinaOpen] = useState(false);
+  const { data, loading } = useUnexpectedSignals(4);
+
+  const items = (data?.signals ?? []).slice(0, 2).map((s: any, i: number) => ({
+    tag: s.related_sector ?? s.event_type ?? '투자 신호',
+    title: s.event_title ?? '',
+    key: i === 0 ? 'hormuz' : 'china',
+  }));
 
   return (
     <div className="px-5 pb-6">

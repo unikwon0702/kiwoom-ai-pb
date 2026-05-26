@@ -179,6 +179,34 @@ function NotificationsPage() {
   const [openKcgi, setOpenKcgi] = useState(false);
   const [openOil, setOpenOil] = useState(false);
 
+  // Fetch data from API
+  const { data: holdingsRaw } = useHoldingSignals('CUST0001', 10);
+  const { data: marketsRaw } = useMarketEvents(10);
+  const { data: schedulesRaw } = useSchedules(10);
+
+  const holdingsItems: Holding[] = (holdingsRaw?.holdings ?? []).map((h: any) => ({
+    tag: h.signal_category === '관심' ? '관심' : '보유',
+    title: h.asset_name ?? '',
+    time: h.date ?? '',
+    desc: h.signal_name ?? '',
+    subDesc: h.interpretation ?? undefined,
+  }));
+
+  const marketItems: Market[] = (marketsRaw?.events ?? []).map((e: any) => ({
+    title: e.event_title ?? '',
+    time: e.published_at ?? '',
+    desc: e.ai_investment_view ?? e.related_sector ?? '',
+    hashtags: [e.related_sector, e.event_type].filter(Boolean) as string[],
+    relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
+  }));
+
+  const scheduleItems: Schedule[] = (schedulesRaw?.schedules ?? []).map((s: any, i: number) => ({
+    dTag: `D-${i + 1}`,
+    date: s.published_at ?? '',
+    title: s.event_title ?? '',
+    desc: s.event_summary ?? '',
+  }));
+
   return (
     <div className="min-h-screen bg-surface-muted">
       <div className="max-w-[480px] mx-auto bg-surface-muted">

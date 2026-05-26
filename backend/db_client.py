@@ -156,7 +156,15 @@ class DBClient:
     # ============================================================
     def get_top_investors(self, limit: int = 4) -> list[dict]:
         return self._execute(f"""
-            SELECT *
+            SELECT rank, investor_type, investor_emoji,
+                   short_status, tags_json, total_asset_krw,
+                   holding_count AS avg_holdings,
+                   total_return_pct,
+                   sector_allocation_json,
+                   domestic_top_json, overseas_top_json,
+                   daily_buys_json, daily_sells_json,
+                   recent_trade_date AS daily_pick_date,
+                   cached_at AS cache_updated_at
             FROM {self._t('app_top_investor_cache')}
             ORDER BY rank ASC
             LIMIT {limit}

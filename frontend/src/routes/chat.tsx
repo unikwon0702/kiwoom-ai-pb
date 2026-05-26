@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, X, Info, Send, Menu, Mic } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { api } from "@/lib/api";
 
 type ChatSearch = { view?: "asset-analysis" };
 
