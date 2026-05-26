@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { tagClassName } from "@/components/pb/tag-style";
 import { HoldingDetailDialog } from "@/components/pb/HoldingDetailDialog";
 import { MarketEventDialog } from "@/components/pb/MarketEventDialog";
+import { useHoldingSignals, useMarketEvents, useSchedules } from "@/hooks/useApiData";
 
 type TabKey = "holdings" | "market" | "schedule";
 
