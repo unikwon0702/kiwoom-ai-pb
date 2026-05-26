@@ -34,7 +34,8 @@ function Index() {
               </span>
               <span className="text-[15px] font-semibold tracking-tight">AI PB</span>
             </div>
-            <div className="flex items-center gap-1 text-foreground/70">
+            <div className="flex items-center gap-2 text-foreground/70">
+              <CustomerSelector />
               <button
                 onClick={() => setSettingsOpen(true)}
                 aria-label="설정"
