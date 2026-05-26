@@ -42,60 +42,36 @@ type Schedule = {
   desc: string;
 };
 
-const holdings: Holding[] = [
-  {
-    tag: "보유",
-    title: "삼성전자",
-    time: "방금",
-    desc: "외국인 투자자들이 많이 사들이고 있어요",
-    subDesc: "HBM 수요 확대와 메모리 가격 반등 기대가 매수세를 자극하고 있어요",
-  },
-  {
-    tag: "관심",
-    title: "PLUS K 방산",
-    time: "7분 전",
-    desc: "실시간 종목 8위를 기록했어요",
-    subDesc: "정부 방산 수출 지원 확대 발표로 관련 ETF에 자금이 몰리고 있어요",
-  },
-  {
-    tag: "보유",
-    title: "KCGI코리아증권투자신탁",
-    time: "10분 전",
-    desc: "운용성과가 기대만큼 나오지 않았어요",
-    subDesc: "반도체 비중이 낮아 코스피 상승 대비 수익률 격차가 벌어졌어요",
-  },
-];
+function useCurrentSituationData(): { holdings: Holding[]; markets: Market[]; schedules: Schedule[]; loading: boolean } {
+  const { data: holdingsData, loading: hLoading } = useHoldingSignals('CUST0001', 5);
+  const { data: marketsData, loading: mLoading } = useMarketEvents(3);
+  const { data: schedulesData, loading: sLoading } = useSchedules(3);
 
-const markets: Market[] = [
-  {
-    title: "국제 유가 +2.4%",
-    time: "방금",
-    desc: "에너지 업종 강세 가능",
-    hashtags: ["에너지", "유가"],
-    relevance: "내가 보유·관심으로 등록한 자산과 관련이 높아요",
-  },
-  {
-    title: "스타벅스 마케팅 논란 확산",
-    time: "20분 전",
-    desc: "보이콧 움직임에 신세계·이마트 단기 약세, 경쟁 카페 반사이익",
-    hashtags: ["소비", "외식"],
-    relevance: "내가 보유한 자산과 관련이 높아요",
-  },
+  const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any) => ({
+    tag: h.signal_category === '관심' ? '관심' : '보유',
+    title: h.asset_name ?? '',
+    time: h.date ? new Date(h.date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '',
+    desc: h.signal_name ?? '',
+    subDesc: h.interpretation ?? '',
+  }));
 
-  {
-    title: "정부 방산 산업 투자 확대 결정",
-    time: "2시간 전",
-    desc: "국내 방산 기업 전반에 대한 기대감 상승",
-    hashtags: ["방산", "정책"],
-    relevance: "내가 관심으로 등록한 자산과 관련이 높아요",
-  },
-];
+  const markets: Market[] = (marketsData?.events ?? []).map((e: any) => ({
+    title: e.event_title ?? '',
+    time: e.published_at ? new Date(e.published_at).toLocaleDateString('ko-KR') : '',
+    desc: e.ai_investment_view ?? e.related_sector ?? '',
+    hashtags: [e.related_sector, e.event_type].filter(Boolean) as string[],
+    relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
+  }));
 
-const schedules: Schedule[] = [
-  { dTag: "D-1", date: "05/22(금)", title: "카카오 2분기 실적보고 발표", desc: "광고·커머스 성과와 AI 성장 전략 공개 예정" },
-  { dTag: "D-2", date: "05/23(토)", title: "KODEX 200 분배금 예정일", desc: "보유 수량 기준 분배금 입금 예정" },
-  { dTag: "D-7", date: "05/28(목)", title: "키움 뉴글로벌 100조 ELS 1888회", desc: "기초자산 종가에 따라 상환 여부 결정" },
-];
+  const schedules: Schedule[] = (schedulesData?.schedules ?? []).map((s: any, i: number) => ({
+    dTag: `D-${i + 1}`,
+    date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
+    title: s.event_title ?? '',
+    desc: s.event_summary ?? s.event_subtype ?? '',
+  }));
+
+  return { holdings, markets, schedules, loading: hLoading || mLoading || sLoading };
+}
 
 function CardShell({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (
