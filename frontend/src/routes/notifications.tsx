@@ -5,6 +5,7 @@ import { tagClassName } from "@/components/pb/tag-style";
 import { HoldingDetailDialog } from "@/components/pb/HoldingDetailDialog";
 import { MarketEventDialog } from "@/components/pb/MarketEventDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules } from "@/hooks/useApiData";
+import { useCustomer } from "@/lib/customer-context";
 
 type TabKey = "holdings" | "market" | "schedule";
 
@@ -142,7 +143,8 @@ function NotificationsPage() {
   const [openOil, setOpenOil] = useState(false);
 
   // Fetch data from API
-  const { data: holdingsRaw } = useHoldingSignals('CUST0001', 10);
+  const { customer } = useCustomer();
+  const { data: holdingsRaw } = useHoldingSignals(customer.id, 10);
   const { data: marketsRaw } = useMarketEvents(10);
   const { data: schedulesRaw } = useSchedules(10);
 

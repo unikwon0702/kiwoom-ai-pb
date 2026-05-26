@@ -7,6 +7,7 @@ import { CurrentSituation } from "@/components/pb/CurrentSituation";
 import { MasterInsight } from "@/components/pb/MasterInsight";
 import { UnexpectedSignal } from "@/components/pb/UnexpectedSignal";
 import { SettingsDialog } from "@/components/pb/SettingsDialog";
+import { CustomerSelector } from "@/components/pb/CustomerSelector";
 
 export const Route = createFileRoute("/")({
   component: Index,

@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { usePortfolioSummary } from "@/hooks/useApiData";
+import { useCustomer } from "@/lib/customer-context";
 
 export function InvestmentSummary() {
-  const { data, loading } = usePortfolioSummary('CUST0001');
+  const { customer } = useCustomer();
+  const { data, loading } = usePortfolioSummary(customer.id);
 
   const returnPct = data?.total_return_pct ?? 0;
   const topAsset = data?.top_asset_name ?? '—';

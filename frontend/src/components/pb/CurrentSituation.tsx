@@ -5,6 +5,7 @@ import { tagClassName } from "./tag-style";
 import { HoldingDetailDialog } from "./HoldingDetailDialog";
 import { MarketEventDialog } from "./MarketEventDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
+import { useCustomer } from "@/lib/customer-context";
 function SummaryBlock({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-background px-3.5 py-3 mb-1">
@@ -42,8 +43,8 @@ type Schedule = {
   desc: string;
 };
 
-function useCurrentSituationData(): { holdings: Holding[]; markets: Market[]; schedules: Schedule[]; loading: boolean } {
-  const { data: holdingsData, loading: hLoading } = useHoldingSignals('CUST0001', 5);
+function useCurrentSituationData(customerId: string): { holdings: Holding[]; markets: Market[]; schedules: Schedule[]; loading: boolean } {
+  const { data: holdingsData, loading: hLoading } = useHoldingSignals(customerId, 5);
   const { data: marketsData, loading: mLoading } = useMarketEvents(3);
   const { data: schedulesData, loading: sLoading } = useSchedules(3);
 
@@ -157,7 +158,9 @@ function Section({ emoji, title, subtitle, children }: { emoji: string; title: s
 
 export function CurrentSituation() {
   const navigate = useNavigate();
-  const { holdings, markets, schedules, loading } = useCurrentSituationData();
+  const { customer } = useCustomer();
+  const { holdings, markets, schedules, loading } = useCurrentSituationData(customer.id);
+  const { data: situationData } = useSituationSummary(customer.id);
   const [activeHolding, setActiveHolding] = useState<"samsung" | "kcgi" | "plusk" | "kakao" | "kodex" | "els" | null>(null);
   const [openOil, setOpenOil] = useState(false);
   const [openDefense, setOpenDefense] = useState(false);
@@ -205,7 +208,7 @@ export function CurrentSituation() {
     <div className="space-y-4 pb-6">
       <Section emoji="💡" title="내 투자 변동" subtitle="보유·관심 상품의 주요 변동을 한눈에 모아드려요">
         <SummaryBlock icon="✨" label="AI 요약">
-          오늘 내가 보유·관심으로 등록한 상품 중 <span className="font-bold text-[color:var(--pos)]">60%</span>에 해당하는 상품에 알림을 받았어요.
+          {situationData?.investment_change?.summary || '요약을 불러오는 중이에요...'}
         </SummaryBlock>
         {holdings.map((it) => (
           <HoldingCard key={it.title} it={it} onClick={() => handleHoldingClick(it)} />
@@ -213,7 +216,7 @@ export function CurrentSituation() {
       </Section>
       <Section emoji="🔍" title="지금뜨는 이벤트·시황" subtitle="시장에서 주목받는 이슈와 그 영향을 알려드려요">
         <SummaryBlock icon="✨" label="AI 요약">
-          지금 시장은 <span className="font-semibold">금리·환율</span>을 중심으로, 미국 CPI 둔화와 ECB 동결로 인해 기대가 커지며 국채금리가 하락 흐름이에요. 성장주·테크에 우호적인 유동성 환경이 형성되지만, 환율·유가 변동성에 따라 수출주와 에너지 방향성은 엇갈릴 수 있어요.
+          {situationData?.market_context?.summary || '요약을 불러오는 중이에요...'}
         </SummaryBlock>
         {markets.map((it) => (
           <MarketCard key={it.title} it={it} onClick={() => handleMarketClick(it)} />
@@ -221,7 +224,7 @@ export function CurrentSituation() {
       </Section>
       <Section emoji="📅" title="다가오는 일정" subtitle="놓치면 안 될 투자 일정을 챙겨드려요">
         <SummaryBlock icon="✨" label="AI 요약">
-          이번주는 <span className="font-bold">3건</span>의 일정이 예정되어 있어요. 내일은 <span className="font-semibold">카카오 2분기 실적</span>이 발표되고, 모레는 <span className="font-semibold">KODEX 200 분배금</span>이 입금돼요. 다음주에는 <span className="font-semibold">키움 뉴글로벌 100조 ELS 1888회</span>의 상환 여부가 결정되니 함께 챙겨두면 좋아요.
+          {situationData?.upcoming_schedule?.summary || '요약을 불러오는 중이에요...'}
         </SummaryBlock>
         {schedules.map((it) => (
           <ScheduleCard key={it.title} it={it} onClick={() => handleScheduleClick(it)} />
