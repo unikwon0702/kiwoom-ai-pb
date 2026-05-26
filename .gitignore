@@ -1,0 +1,23 @@
+# Dependencies
+frontend/node_modules/
+frontend/.cache/
+
+# Build output (commit dist/ for Databricks App deployment)
+# dist/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
