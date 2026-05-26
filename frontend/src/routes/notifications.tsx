@@ -42,45 +42,6 @@ type Schedule = {
   read?: boolean;
 };
 
-const holdingsItems: Holding[] = [
-  { tag: "보유", title: "삼성전자", time: "방금", desc: "외국인 투자자들이 많이 사들이고 있어요", subDesc: "HBM 수요 확대와 메모리 가격 반등 기대가 매수세를 자극하고 있어요" },
-  { tag: "관심", title: "PLUS K 방산", time: "7분 전", desc: "실시간 종목 8위를 기록했어요", subDesc: "정부 방산 수출 지원 확대 발표로 관련 ETF에 자금이 몰리고 있어요" },
-  { tag: "보유", title: "KCGI코리아증권투자신탁", time: "10분 전", desc: "운용성과가 기대만큼 나오지 않았어요", subDesc: "반도체 비중이 낮아 코스피 상승 대비 수익률 격차가 벌어졌어요" },
-  { tag: "보유", title: "현대차", time: "12분 전", desc: "외국인 순매수 1위, 기관도 동반 매수 중", subDesc: "북미 친환경차 판매 호조와 환율 효과로 실적 기대가 커지고 있어요" },
-  { tag: "관심", title: "SK하이닉스", time: "15분 전", desc: "메모리 가격 상승 기대감에 강한 매수세", subDesc: "AI 서버용 HBM3E 공급 확대 소식이 외국인 매수를 끌어들이고 있어요" },
-  { tag: "보유", title: "카카오", time: "20분 전", desc: "실적 개선 기대감으로 개인투자자 매수 증가", subDesc: "광고·커머스 회복과 AI 신사업 모멘텀이 동시에 반영되고 있어요" },
-  { tag: "보유", title: "네이버", time: "25분 전", desc: "광고 매출 호조에 기관 매수세 유입", read: true },
-  { tag: "관심", title: "LG에너지솔루션", time: "30분 전", desc: "2차전지 수요 회복 기대감", read: true },
-  { tag: "보유", title: "셀트리온", time: "35분 전", desc: "바이오시밀러 승인 호재에 상승세", subDesc: "미국 FDA 추가 적응증 승인으로 매출 확대 기대가 반영되고 있어요", read: true },
-  { tag: "보유", title: "POSCO홀딩스", time: "40분 전", desc: "철강 수출 증가 기대감에 강세", read: true },
-];
-
-const marketItems: Market[] = [
-  { title: "국제 유가 +2.4%", time: "방금", desc: "에너지 업종 강세 가능", hashtags: ["에너지", "유가"], relevance: "내가 보유·관심으로 등록한 자산과 관련이 높아요" },
-  { title: "스타벅스 마케팅 논란 확산", time: "20분 전", desc: "보이콧 움직임에 신세계·이마트 단기 약세, 경쟁 카페 반사이익", hashtags: ["소비", "외식"], relevance: "내가 보유한 자산과 관련이 높아요" },
-  { title: "정부 방산 산업 투자 확대 결정", time: "2시간 전", desc: "국내 방산 기업 전반에 대한 기대감 상승", hashtags: ["방산", "정책"], relevance: "내가 관심으로 등록한 자산과 관련이 높아요" },
-  { title: "미국 CPI 3.2% 상승", time: "방금", desc: "금리 인하 기대감 확대", hashtags: ["CPI", "인플레"], relevance: "내가 보유한 자산과 관련이 높아요" },
-  { title: "중국 PMI 50.3 회복", time: "30분 전", desc: "중국 소비 관련주 주목", hashtags: ["중국", "소비"] },
-  { title: "금리 인하 기대감 확산", time: "40분 전", desc: "성장주 및 테크 섹터 강세", hashtags: ["금리", "성장주"], relevance: "내가 관심으로 등록한 자산과 관련이 높아요" },
-  { title: "반도체 수출 +15% 증가", time: "50분 전", desc: "D램 가격 상승세 지속", hashtags: ["반도체", "D램"], read: true },
-  { title: "유럽중앙은행(ECB) 금리 동결", time: "1시간 전", desc: "글로벌 유동성 개선 기대", hashtags: ["ECB", "통화정책"], relevance: "내가 보유·관심으로 등록한 자산과 관련이 높아요", read: true },
-  { title: "일본 엔화 약세 지속", time: "1시간 전", desc: "일본 수출주 경쟁력 상승", hashtags: ["엔화", "일본"], read: true },
-  { title: "러시아·우크라이나 긴장 완화", time: "2시간 전", desc: "원자재 가격 안정화 기대", hashtags: ["원자재", "지정학"], relevance: "내가 보유한 자산과 관련이 높아요", read: true },
-];
-
-const scheduleItems: Schedule[] = [
-  { dTag: "D-1", date: "05/22(금)", title: "카카오 2분기 실적보고 발표", desc: "광고·커머스 성과와 AI 성장 전략 공개 예정" },
-  { dTag: "D-2", date: "05/23(토)", title: "KODEX 200 분배금 예정일", desc: "보유 수량 기준 분배금 입금 예정" },
-  { dTag: "D-7", date: "05/28(목)", title: "키움 뉴글로벌 100조 ELS 1888회", desc: "기초자산 종가에 따라 상환 여부 결정" },
-  { dTag: "D-3", date: "05/24(일)", title: "한국은행 금융통화위원회", desc: "기준금리 결정 주목" },
-  { dTag: "D-4", date: "05/25(월)", title: "미국 연준 FOMC 의사록 공개", desc: "금리 인하 시점 점검" },
-  { dTag: "D-5", date: "05/26(화)", title: "삼성SDI 주주총회", desc: "배터리 사업 전략 확인", read: true },
-  { dTag: "D-6", date: "05/27(수)", title: "현대차 인적분할 기일", desc: "기업가치 재평가 주목", read: true },
-  { dTag: "D-8", date: "05/29(목)", title: "LG화학 이사회", desc: "신소재 사업 방향성 점검", read: true },
-  { dTag: "D-9", date: "05/30(금)", title: "SK이노베이션 실적발표", desc: "정유·배터리 실적 확인", read: true },
-  { dTag: "D-10", date: "05/31(일)", title: "POSCO 인적분할 기일", desc: "철강 사업 구조 개편", read: true },
-];
-
 const tabs: { key: TabKey; label: string }[] = [
   { key: "holdings", label: "내 투자 변동" },
   { key: "market", label: "지금뜨는 이벤트·시황" },

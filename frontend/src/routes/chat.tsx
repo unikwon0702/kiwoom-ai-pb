@@ -44,41 +44,19 @@ function ChatPage() {
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>(() => loadHistory());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const FOLLOWUP_ANSWERS: Record<string, string> = {
-    "펀더멘털 진단이 뭐야?":
-      "펀더멘털 진단은 기업의 실적·재무 상태를 보고 본질 가치를 평가하는 분석이에요. 매출·영업이익률·순이익률 같은 지표로 회사가 돈을 얼마나 잘 벌고 있는지를 확인해요.",
-    "기술적 진단 자세하게 알려줘":
-      "기술적 진단은 주가의 흐름과 거래 패턴을 분석하는 방법이에요. 추세선·이동평균선·RSI·거래량 같은 지표로 상승/하락 모멘텀과 매수·매도 타이밍을 가늠해요. 현재 삼성전자는 우상향 추세에 RSI도 중립~강세 구간이라 추가 상승 여지가 있어요.",
-    "수급 진단 더 알려줘":
-      "수급 진단은 외국인·기관·개인의 매매 동향을 보는 분석이에요. 삼성전자는 외국인 순매수가 4일 연속 이어지고 있어 단기 매수세 유입이 강한 상태예요.",
-    "지금 더 사도 될까?":
-      "단기 모멘텀은 우호적이지만, 이미 보유 비중이 있다면 분할 매수를 권해드려요. 추가 매수는 본인 포트폴리오의 반도체 비중과 현금 여력을 함께 고려해보세요.",
-  };
-  const FOLLOWUP_SUGGESTIONS = Object.keys(FOLLOWUP_ANSWERS);
+  const sendQuestion = async (text: string) => {
+    setMessages((prev) => [...prev, { role: "user", text }]);
+    setLoading(true);
 
-  const sendQuestion = (text: string) => {
-    const followupAnswer = FOLLOWUP_ANSWERS[text];
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", text },
-      ...(followupAnswer
-        ? ([
-            { role: "bot", kind: "text", text: followupAnswer },
-            { role: "bot", kind: "followup", suggestions: FOLLOWUP_SUGGESTIONS },
-          ] as Msg[])
-        : ([
-            { role: "bot", kind: "text", text: "네, 보유하신 삼성전자 주식에 대해서 진단해드릴게요 📊" },
-            { role: "bot", kind: "diagnosis" },
-            { role: "bot", kind: "text", text: "여기까지 진단해드렸어요 😊 더 궁금하신 점이 있다면 언제든 편하게 물어봐 주세요!" },
-            { role: "bot", kind: "followup", suggestions: FOLLOWUP_SUGGESTIONS },
-          ] as Msg[])),
-    ]);
+    // 히스토리 저장
     setHistory((prev) => {
       const next = [text, ...prev.filter((q) => q !== text)].slice(0, 30);
       try {
@@ -88,10 +66,27 @@ function ChatPage() {
       }
       return next;
     });
+
+    try {
+      const res = await api.chat(text, conversationId);
+      setConversationId(res.conversation_id);
+      setMessages((prev) => [
+        ...prev,
+        { role: "bot", kind: "text", text: res.answer },
+      ]);
+    } catch (e: any) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "bot", kind: "text", text: `죄송해요, 응답 중 오류가 발생했어요: ${e.message}` },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSend = () => {
-    const userText = input.trim() || "삼성전자 종목 진단해줘";
+    const userText = input.trim();
+    if (!userText) return;
     setInput("");
     sendQuestion(userText);
   };
@@ -165,7 +160,7 @@ function ChatPage() {
                 {["종목 진단 해줘", "내 포트폴리오 분석해줘", "오늘 시장 이슈 알려줘", "지금 사도 될까?"].map((q) => (
                   <button
                     key={q}
-                    onClick={() => setInput(q)}
+                    onClick={() => sendQuestion(q)}
                     className="text-[13px] px-3.5 py-2 rounded-full bg-white border text-foreground hover:bg-white/80 transition-colors"
                     style={{ borderColor: "#C9D3F5" }}
                   >
@@ -210,6 +205,13 @@ function ChatPage() {
                 ) : (
                   <DiagnosisCard key={i} />
                 ),
+              )}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="max-w-[90%] text-[14px] leading-[1.55] text-muted-foreground animate-pulse">
+                    💭 답변 생성 중...
+                  </div>
+                </div>
               )}
               <div ref={endRef} />
             </div>
@@ -293,7 +295,7 @@ function DiagnosisCard() {
         <Bullets items={[{ k: "외국인", v: "순매수 4일 연속 증가", note: "매수세 유입 확대" }]} />
       </Section>
 
-      <Section icon="🗞️" title="이벤트 시황 진단">
+      <Section icon="🗃️" title="이벤트 시황 진단">
         <Oneline text="미국 정부의 AI 서버 투자 확대 기대로 삼성전자 실적 개선 기대가 커지고 있어요" />
       </Section>
     </div>
