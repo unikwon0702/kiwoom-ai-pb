@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import { tagClassName } from "./tag-style";
 import { HoldingDetailDialog } from "./HoldingDetailDialog";
 import { MarketEventDialog } from "./MarketEventDialog";
-import { useHoldingSignals, useMarketEvents, useSchedules } from "@/hooks/useApiData";
+import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 function SummaryBlock({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-background px-3.5 py-3 mb-1">

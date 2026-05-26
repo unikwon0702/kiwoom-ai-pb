@@ -60,6 +60,16 @@ export const api = {
     return request<{ alerts: any[] }>(`/customer-alerts${q}`);
   },
 
+  getSituationSummary: (customerId = 'CUST0010') =>
+    request<{
+      customer_id: string;
+      customer_name: string;
+      as_of_date: string;
+      investment_change: { summary: string };
+      market_context: { summary: string };
+      upcoming_schedule: { summary: string };
+    }>(`/situation-summary?customer_id=${customerId}`),
+
   getTopInvestors: (limit = 4) =>
     request<{ investors: any[] }>(`/top-investor?limit=${limit}`),
 

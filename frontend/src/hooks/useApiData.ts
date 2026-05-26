@@ -55,6 +55,11 @@ export function useCustomerAlerts(customerId?: string, priority?: string) {
   return useFetch(() => api.getCustomerAlerts(customerId, priority), [customerId, priority]);
 }
 
+// ===== Situation Summary =====
+export function useSituationSummary(customerId = 'CUST0010') {
+  return useFetch(() => api.getSituationSummary(customerId), [customerId]);
+}
+
 // ===== Top Investors =====
 export function useTopInvestors(limit = 4) {
   return useFetch(() => api.getTopInvestors(limit), [limit]);

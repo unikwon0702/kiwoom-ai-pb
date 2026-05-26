@@ -78,6 +78,15 @@ def get_customer_alerts(
     return {"alerts": db.get_customer_alerts(customer_id, priority)}
 
 
+@app.get("/api/situation-summary")
+def get_situation_summary(customer_id: str = Query(default="CUST0010")):
+    """홈 화면 AI 요약 문구 (고객별 개인화)"""
+    data = db.get_situation_summary(customer_id)
+    if not data.get('customer_name'):
+        raise HTTPException(404, f"No summary found for {customer_id}")
+    return data
+
+
 @app.get("/api/top-investor")
 def get_top_investor(limit: int = Query(default=4, le=20)):
     """[화면6] 고수들은 지금 이렇게 움직이고 있어요"""

@@ -152,6 +152,31 @@ class DBClient:
         """)
 
     # ============================================================
+    # Situation Summary (AI 요약 캐시)
+    # ============================================================
+    def get_situation_summary(self, customer_id: str) -> dict:
+        rows = self._execute(f"""
+            SELECT customer_id, customer_name, card_type, summary_text, as_of_date
+            FROM {self._t('app_cache_situation_summary')}
+            WHERE customer_id = '{customer_id}'
+        """)
+        result = {
+            'customer_id': customer_id,
+            'customer_name': '',
+            'as_of_date': '',
+            'investment_change': {'summary': ''},
+            'market_context': {'summary': ''},
+            'upcoming_schedule': {'summary': ''},
+        }
+        for row in rows:
+            result['customer_name'] = row.get('customer_name', '')
+            result['as_of_date'] = row.get('as_of_date', '')
+            card = row.get('card_type', '')
+            if card in result:
+                result[card] = {'summary': row.get('summary_text', '')}
+        return result
+
+    # ============================================================
     # Top Investors [화면6]
     # ============================================================
     def get_top_investors(self, limit: int = 4) -> list[dict]:
