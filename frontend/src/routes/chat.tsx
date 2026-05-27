@@ -1,23 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, X, Info, Send, Menu, Mic } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-import { api } from "@/lib/api";
-
-type ChatSearch = { view?: "asset-analysis" };
+import { useCustomer } from "@/lib/customer-context";
 
 export const Route = createFileRoute("/chat")({
   component: ChatPage,
-  validateSearch: (search: Record<string, unknown>): ChatSearch => ({
-    view: search.view === "asset-analysis" ? "asset-analysis" : undefined,
-  }),
 });
 
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; kind: "text"; text: string }
-  | { role: "bot"; kind: "diagnosis" }
-  | { role: "bot"; kind: "asset-analysis" }
-  | { role: "bot"; kind: "followup"; suggestions: string[] };
+  | { role: "bot"; text: string };
 
 const HISTORY_KEY = "aipb_chat_questions";
 
@@ -32,15 +24,8 @@ function loadHistory(): string[] {
 }
 
 function ChatPage() {
-  const { view } = Route.useSearch();
-  const [messages, setMessages] = useState<Msg[]>(() =>
-    view === "asset-analysis"
-      ? [
-          { role: "bot", kind: "text", text: "김키움님의 어제 자산을 분석해봤어요." },
-          { role: "bot", kind: "asset-analysis" },
-        ]
-      : [],
-  );
+  const { customer } = useCustomer();
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>(() => loadHistory());
   const [menuOpen, setMenuOpen] = useState(false);
@@ -68,16 +53,28 @@ function ChatPage() {
     });
 
     try {
-      const res = await api.chat(text, conversationId);
-      setConversationId(res.conversation_id);
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: text,
+          customer_id: customer.id,
+          conversation_id: conversationId,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(await res.text() || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setConversationId(data.conversation_id);
       setMessages((prev) => [
         ...prev,
-        { role: "bot", kind: "text", text: res.answer },
+        { role: "bot", text: data.answer },
       ]);
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", kind: "text", text: `죄송해요, 응답 중 오류가 발생했어요: ${e.message}` },
+        { role: "bot", text: `죄송해요, 응답 중 오류가 발생했어요: ${e.message}` },
       ]);
     } finally {
       setLoading(false);
@@ -183,27 +180,10 @@ function ChatPage() {
                       {m.text}
                     </div>
                   </div>
-                ) : m.kind === "text" ? (
-                  <div key={i} className="flex justify-start">
-                    <div className="max-w-[90%] text-[14px] leading-[1.55] text-foreground">{m.text}</div>
-                  </div>
-                ) : m.kind === "asset-analysis" ? (
-                  <AssetAnalysisCard key={i} />
-                ) : m.kind === "followup" ? (
-                  <div key={i} className="flex flex-wrap gap-2 pt-1">
-                    {m.suggestions.map((q) => (
-                      <button
-                        key={q}
-                        onClick={() => sendQuestion(q)}
-                        className="text-[13px] px-3.5 py-2 rounded-full bg-white border text-foreground hover:bg-white/80 transition-colors"
-                        style={{ borderColor: "#C9D3F5" }}
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
                 ) : (
-                  <DiagnosisCard key={i} />
+                  <div key={i} className="flex justify-start">
+                    <div className="max-w-[90%] text-[14px] leading-[1.55] text-foreground whitespace-pre-wrap">{m.text}</div>
+                  </div>
                 ),
               )}
               {loading && (
@@ -250,145 +230,6 @@ function ChatPage() {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function DiagnosisCard() {
-  return (
-    <div className="rounded-2xl bg-white border shadow-sm p-4 space-y-4" style={{ borderColor: "#C9D3F5" }}>
-      <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: "#E4EAFB" }}>
-        <span className="text-[18px]">📈</span>
-        <h3 className="text-[15px] font-bold text-foreground">삼성전자 주식 진단</h3>
-      </div>
-
-      <Section icon="🎯" title="종합 결론">
-        <p className="text-[13px] leading-[1.6] text-foreground/85">
-          미국 AI 서버 투자 확대 기대와 외국인 매수세가 맞물리며 주가 상승 흐름이 강화되고 있어요.
-        </p>
-      </Section>
-
-      <Section icon="💪" title="펀더멘털 진단">
-        <Oneline text="AI 수요 증가로 실적 개선 기대가 높아지고 있어요" />
-        <Bullets
-          items={[
-            { k: "영업이익률", v: "개선 추세", note: "메모리 가격 상승 영향" },
-            { k: "순이익률", v: "상승 기조", note: "고부가 제품 확대 영향" },
-            { k: "매출성장률", v: "회복 국면", note: "AI 서버 수요 증가 영향" },
-          ]}
-        />
-      </Section>
-
-      <Section icon="📊" title="기술적 진단">
-        <Oneline text="상승 추세가 형성되며 모멘텀이 강화되고 있어요" />
-        <Bullets
-          items={[
-            { k: "추세선 기울기", v: "우상향", note: "상승 추세 지속" },
-            { k: "신고가/신저가", v: "고점 갱신 시도", note: "상승 압력 확대" },
-            { k: "RSI", v: "중립~강세", note: "추가 상승 여지" },
-          ]}
-        />
-      </Section>
-
-      <Section icon="💰" title="수급 진단">
-        <Oneline text="외국인 순매수가 4일 연속 증가했어요" />
-        <Bullets items={[{ k: "외국인", v: "순매수 4일 연속 증가", note: "매수세 유입 확대" }]} />
-      </Section>
-
-      <Section icon="🗃️" title="이벤트 시황 진단">
-        <Oneline text="미국 정부의 AI 서버 투자 확대 기대로 삼성전자 실적 개선 기대가 커지고 있어요" />
-      </Section>
-    </div>
-  );
-}
-
-function Section({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-[14px]">{icon}</span>
-        <h4 className="text-[13.5px] font-semibold text-foreground">{title}</h4>
-      </div>
-      <div className="space-y-2">{children}</div>
-    </div>
-  );
-}
-
-function Oneline({ text }: { text: string }) {
-  return (
-    <div
-      className="rounded-lg px-3 py-2 text-[12.5px] leading-[1.5] font-medium"
-      style={{ backgroundColor: "#EEF0FF", color: "#606CF2" }}
-    >
-      💬 {text}
-    </div>
-  );
-}
-
-function Bullets({ items }: { items: { k: string; v: string; note: string }[] }) {
-  return (
-    <ul className="space-y-1.5">
-      {items.map((it) => (
-        <li key={it.k} className="text-[12.5px] leading-[1.5] text-foreground/85">
-          <span className="font-semibold text-foreground">{it.k}: </span>
-          <span>{it.v}</span>
-          <span className="text-muted-foreground"> ({it.note})</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function AssetAnalysisCard() {
-  return (
-    <div className="rounded-2xl bg-white border shadow-sm p-4 space-y-4" style={{ borderColor: "#C9D3F5" }}>
-      <div className="flex items-center gap-2 pb-2 border-b" style={{ borderColor: "#E4EAFB" }}>
-        <span className="text-[18px]">💼</span>
-        <h3 className="text-[15px] font-bold text-foreground">어제 자산 분석 리포트</h3>
-      </div>
-
-      <Section icon="📈" title="전체 수익률">
-        <Oneline text="어제 대비 +2.8% 상승하며 강한 회복세를 보였어요" />
-        <Bullets
-          items={[
-            { k: "총 평가금액", v: "1억 2,450만원", note: "전일 대비 +340만원" },
-            { k: "일간 수익률", v: "+2.8%", note: "코스피 +1.2% 대비 우수" },
-            { k: "누적 수익률", v: "+12.4%", note: "연초 대비" },
-          ]}
-        />
-      </Section>
-
-      <Section icon="🏆" title="수익 기여 종목">
-        <Oneline text="삼성전자가 수익 상승에 가장 크게 기여했어요" />
-        <Bullets
-          items={[
-            { k: "삼성전자", v: "+4.2%", note: "AI 서버 수요 기대" },
-            { k: "SK하이닉스", v: "+3.1%", note: "HBM 매출 확대" },
-            { k: "현대차", v: "+1.8%", note: "북미 판매 호조" },
-          ]}
-        />
-      </Section>
-
-      <Section icon="⚠️" title="주의 종목">
-        <Oneline text="일부 종목은 단기 조정 흐름이 나타나고 있어요" />
-        <Bullets
-          items={[
-            { k: "카카오", v: "-1.2%", note: "규제 이슈 영향" },
-            { k: "LG화학", v: "-0.8%", note: "2차전지 수요 둔화" },
-          ]}
-        />
-      </Section>
-
-      <Section icon="🧭" title="자산 배분 진단">
-        <Oneline text="국내 주식 비중이 다소 높아요. 분산 투자를 고려해보세요" />
-        <Bullets
-          items={[
-            { k: "국내 주식", v: "68%", note: "권장 50~60%" },
-            { k: "해외 주식", v: "18%", note: "권장 20~30%" },
-            { k: "채권/현금", v: "14%", note: "권장 15~20%" },
-          ]}
-        />
-      </Section>
     </div>
   );
 }

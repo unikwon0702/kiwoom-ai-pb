@@ -2,6 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { ProductHistoryDialog } from "@/components/pb/ProductHistoryDialog";
+import { useHoldingSignals } from "@/hooks/useApiData";
+import { useCustomer } from "@/lib/customer-context";
 
 export const Route = createFileRoute("/product-history")({
   component: ProductHistoryPage,
@@ -19,18 +21,6 @@ type ProductRecord = {
   trend: "up" | "down" | "flat";
 };
 
-const records: ProductRecord[] = [
-  { type: "주식", name: "삼성전자", days: 7, count: 12, latest: "외국인 순매수 영향으로 +1.2% 상승", latestTime: "방금", trend: "up" },
-  { type: "주식", name: "현대차", days: 7, count: 9, latest: "실적 개선 기대로 +1.8% 상승", latestTime: "12분 전", trend: "up" },
-  { type: "ETF", name: "TIGER 미국S&P500", days: 7, count: 15, latest: "기술주 강세로 기준가 +1.1%", latestTime: "1시간 전", trend: "up" },
-  { type: "ETF", name: "KODEX 2차전지", days: 7, count: 21, latest: "정책 자금 유입으로 +3.1% 상승", latestTime: "3시간 전", trend: "up" },
-  { type: "펀드", name: "글로벌 인컴 펀드", days: 7, count: 8, latest: "배당 재투자 효과로 기준가 +0.4%", latestTime: "어제", trend: "up" },
-  { type: "ELS", name: "삼성전자 ELS 12회차", days: 7, count: 11, latest: "기초자산 안정으로 조기상환 조건 근접", latestTime: "2일 전", trend: "up" },
-  { type: "ELB", name: "코스피200 ELB", days: 7, count: 10, latest: "지수 반등으로 평가금액 +0.8%", latestTime: "4일 전", trend: "up" },
-  { type: "채권", name: "국고채 10년물", days: 7, count: 14, latest: "금리 하락 영향으로 채권 가격 +0.6%", latestTime: "6일 전", trend: "up" },
-  { type: "채권", name: "회사채 AA- 3년물", days: 7, count: 8, latest: "신용 스프레드 축소로 평가이익 +0.3%", latestTime: "10일 전", trend: "up" },
-];
-
 type FilterKey = "전체" | "주식·ETF" | "펀드·채권·파생상품";
 const filters: FilterKey[] = ["전체", "주식·ETF", "펀드·채권·파생상품"];
 const filterMap: Record<FilterKey, AssetType[] | null> = {
@@ -38,6 +28,17 @@ const filterMap: Record<FilterKey, AssetType[] | null> = {
   "주식·ETF": ["주식", "ETF"],
   "펀드·채권·파생상품": ["펀드", "채권", "ELS", "ELB"],
 };
+
+function inferAssetType(category: string | null | undefined, name: string): AssetType {
+  if (!category && !name) return "주식";
+  const n = (name ?? "").toLowerCase();
+  if (n.includes("etf") || n.includes("tiger") || n.includes("kodex") || n.includes("arirang")) return "ETF";
+  if (n.includes("펀드") || n.includes("투자신탁") || n.includes("trust")) return "펀드";
+  if (n.includes("els")) return "ELS";
+  if (n.includes("elb")) return "ELB";
+  if (n.includes("채권") || n.includes("국고채") || n.includes("회사채") || n.includes("dlb") || n.includes("금리")) return "채권";
+  return "주식";
+}
 
 function typeBadgeClass(type: AssetType) {
   switch (type) {
@@ -59,6 +60,39 @@ function typeBadgeClass(type: AssetType) {
 function ProductHistoryPage() {
   const [active, setActive] = useState<FilterKey>("전체");
   const [openName, setOpenName] = useState<string | null>(null);
+
+  const { customer } = useCustomer();
+  const { data: holdingsRaw, loading } = useHoldingSignals(customer.id, 50);
+
+  // Group by asset_name and build ProductRecord[]
+  const records: ProductRecord[] = (() => {
+    const holdings = holdingsRaw?.holdings ?? [];
+    if (holdings.length === 0) return [];
+
+    const grouped: Record<string, any[]> = {};
+    for (const h of holdings) {
+      const name = h.asset_name ?? "";
+      if (!grouped[name]) grouped[name] = [];
+      grouped[name].push(h);
+    }
+
+    return Object.entries(grouped).map(([name, items]) => {
+      const sorted = items.sort((a: any, b: any) => 
+        (b.date ?? "").localeCompare(a.date ?? "")
+      );
+      const latest = sorted[0];
+      return {
+        type: inferAssetType(latest.signal_category, name),
+        name,
+        days: 7,
+        count: items.length,
+        latest: latest.signal_name ?? latest.interpretation ?? "",
+        latestTime: latest.date ? new Date(latest.date).toLocaleDateString("ko-KR", { month: "short", day: "numeric" }) : "",
+        trend: "up" as const,
+      };
+    });
+  })();
+
   const allowed = filterMap[active];
   const filtered = allowed === null ? records : records.filter(r => allowed.includes(r.type));
 
@@ -103,35 +137,45 @@ function ProductHistoryPage() {
         </div>
 
         <main className="px-5 pt-4 pb-10">
-          <ul className="space-y-2">
-            {filtered.map((r, idx) => (
-              <li key={`${r.name}-${idx}`}>
-                <button
-                  onClick={() => r.name === "삼성전자" && setOpenName(r.name)}
-                  className="relative w-full text-left pl-4 pr-9 py-3.5 rounded-2xl bg-card border border-border/60 transition-colors hover:bg-muted/40"
-                >
-                  <span className="absolute right-3 top-3 text-[11.5px] text-muted-foreground/70">{r.latestTime}</span>
-                  <div className="flex items-center gap-2 pr-14">
-                    <span className={`text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${typeBadgeClass(r.type)}`}>
-                      {r.type}
-                    </span>
-                    <span className="flex-1 text-[14px] font-bold text-foreground truncate">{r.name}</span>
-                  </div>
-                  <div className="mt-1.5 text-[11.5px] text-muted-foreground/80">
-                    최근 변화 {r.count}건
-                  </div>
-                  <div className="mt-2 text-[12.5px] text-foreground/80 truncate">{r.latest}</div>
-                  <ChevronRight className="size-4 text-muted-foreground/60 absolute right-3 top-1/2 -translate-y-1/2" />
-                </button>
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <div className="text-center py-12 text-[13px] text-muted-foreground">
+              불러오는 중...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-12 text-[13px] text-muted-foreground">
+              표시할 자산 알림이 없습니다.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {filtered.map((r, idx) => (
+                <li key={`${r.name}-${idx}`}>
+                  <button
+                    onClick={() => setOpenName(r.name)}
+                    className="relative w-full text-left pl-4 pr-9 py-3.5 rounded-2xl bg-card border border-border/60 transition-colors hover:bg-muted/40"
+                  >
+                    <span className="absolute right-3 top-3 text-[11.5px] text-muted-foreground/70">{r.latestTime}</span>
+                    <div className="flex items-center gap-2 pr-14">
+                      <span className={`text-[10.5px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${typeBadgeClass(r.type)}`}>
+                        {r.type}
+                      </span>
+                      <span className="flex-1 text-[14px] font-bold text-foreground truncate">{r.name}</span>
+                    </div>
+                    <div className="mt-1.5 text-[11.5px] text-muted-foreground/80">
+                      최근 변화 {r.count}건
+                    </div>
+                    <div className="mt-2 text-[12.5px] text-foreground/80 truncate">{r.latest}</div>
+                    <ChevronRight className="size-4 text-muted-foreground/60 absolute right-3 top-1/2 -translate-y-1/2" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </main>
         <ProductHistoryDialog
-          open={openName === "삼성전자"}
+          open={openName !== null}
           onOpenChange={(o) => !o && setOpenName(null)}
-          tag="주식"
-          title="삼성전자"
+          tag={records.find(r => r.name === openName)?.type ?? "주식"}
+          title={openName ?? ""}
         />
       </div>
     </div>
