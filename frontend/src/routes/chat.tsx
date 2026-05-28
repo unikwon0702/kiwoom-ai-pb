@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, X, Send, Menu, Mic, User, Activity, Zap } from "lucide-react";
+import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
 import {
-  BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, Tooltip, ResponsiveContainer
+  PieChart, Pie, Cell,
+  Tooltip, ResponsiveContainer
 } from "recharts";
 
 export const Route = createFileRoute("/chat")({
@@ -34,7 +34,7 @@ const COL_KR: Record<string, string> = {
   asset_category:"자산구분", concentration_score:"집중도", volatility:"변동성",
   bond_fund_ratio:"채권펀드", market_value:"시장가치", quantity:"수량",
 };
-function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g," "); }
+function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g, " "); }
 
 /* ===== Formatters ===== */
 function fmtVal(val: any): string {
@@ -47,7 +47,6 @@ function fmtVal(val: any): string {
   return n.toLocaleString("ko-KR");
 }
 
-/* ===== History ===== */
 function loadHistory(): string[] {
   try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
 }
@@ -141,7 +140,6 @@ function ChatPage() {
   );
 }
 
-
 /* ===== Empty State ===== */
 function EmptyState({ name, onSend }: { name: string; onSend: (q: string) => void }) {
   const suggestions = [
@@ -196,44 +194,66 @@ function LoadingPulse({ name }: { name: string }) {
 
 /* ===== Bot Message ===== */
 function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
-  // Build charts from table data
-  const tableCharts = msg.tableData ? buildChartsFromTable(msg.tableData) : [];
-  // Extract numeric data from text for additional charts
-  const textCharts = extractChartsFromText(msg.text);
-  // Combine: prioritize table charts, supplement with text charts
-  const allCharts = tableCharts.length >= 2 ? tableCharts : [...tableCharts, ...textCharts].slice(0, 3);
-  // Format the answer text
-  const formatted = formatAnswer(msg.text);
+  const sections = parseAnswer(msg.text);
+  const charts = msg.tableData ? buildCharts(msg.tableData) : [];
 
   return (
     <div className="flex justify-start w-full">
       <div className="w-full space-y-3">
-        {/* Main Card: Formatted Text */}
-        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="size-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
-              <Activity className="size-3.5 text-white" />
+        {/* Main Summary Card */}
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="size-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
+                <Activity className="size-3.5 text-white" />
+              </div>
+              <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
             </div>
-            <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
+            {sections.summary && (
+              <p className="text-[13.5px] text-gray-700 leading-[1.7] whitespace-pre-wrap">{sections.summary}</p>
+            )}
           </div>
-          <div className="space-y-3">
-            {formatted.map((block, i) => <FormattedBlock key={i} block={block} />)}
-          </div>
+          {/* First chart inside main card */}
+          {charts.length > 0 && (
+            <div className="px-4 pb-4 pt-1">
+              {charts[0].type === "donut" ? <InlineDonut data={charts[0].data} /> : <InlineBar data={charts[0].data} />}
+            </div>
+          )}
         </div>
 
-        {/* Charts */}
-        {allCharts.map((chart, i) => (
+        {/* Additional charts */}
+        {charts.slice(1).map((chart, i) => (
           <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-[14px]">{chart.emoji}</span>
+              <span className="text-[14px]">{chart.type === "donut" ? "🎯" : "📊"}</span>
               <span className="text-[12px] font-bold text-gray-700">{chart.title}</span>
             </div>
             {chart.type === "donut" ? <InlineDonut data={chart.data} /> : <InlineBar data={chart.data} />}
           </div>
         ))}
 
+        {/* Detail sections */}
+        {sections.details.map((sec, i) => (
+          <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="size-6 rounded-md flex items-center justify-center" style={{ backgroundColor: getSectionStyle(sec.title).bg }}>
+                {getSectionStyle(sec.title).icon}
+              </div>
+              <span className="text-[12.5px] font-bold text-gray-800">{sec.title}</span>
+            </div>
+            <div className="space-y-2">
+              {sec.items.map((item, j) => (
+                <div key={j} className="flex items-start gap-2.5 pl-1">
+                  <span className="size-1.5 rounded-full mt-[7px] shrink-0" style={{ backgroundColor: COLORS[j % COLORS.length] }} />
+                  <span className="text-[13px] text-gray-600 leading-[1.6]">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
         {/* Metric cards for single-row data */}
-        {msg.tableData && msg.tableData.rows.length === 1 && msg.tableData.columns.length >= 2 && msg.tableData.columns.length <= 4 && tableCharts.length === 0 && (
+        {msg.tableData && msg.tableData.rows.length === 1 && msg.tableData.columns.length >= 2 && msg.tableData.columns.length <= 4 && charts.length === 0 && (
           <div className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
             <div className="grid grid-cols-2 gap-3">
               {msg.tableData.columns.map((col, ci) => {
@@ -257,212 +277,9 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
   );
 }
 
-
-/* ===== Formatted Text Block ===== */
-type TextBlock =
-  | { type: "headline"; emoji: string; text: string }
-  | { type: "metric"; label: string; value: string; positive?: boolean }
-  | { type: "bullet"; emoji: string; bold: string; rest: string }
-  | { type: "text"; content: string };
-
-function FormattedBlock({ block }: { block: TextBlock }) {
-  if (block.type === "headline") {
-    return (
-      <div className="flex items-start gap-2">
-        <span className="text-[15px] mt-0.5">{block.emoji}</span>
-        <p className="text-[14px] font-bold text-gray-800 leading-relaxed">{block.text}</p>
-      </div>
-    );
-  }
-  if (block.type === "metric") {
-    return (
-      <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-gradient-to-r from-[#F8F9FF] to-[#F0F4FF]">
-        <span className="text-[12.5px] text-gray-500">{block.label}</span>
-        <span className={`text-[15px] font-bold ${block.positive === true ? "text-emerald-600" : block.positive === false ? "text-red-500" : "text-gray-800"}`}>{block.value}</span>
-      </div>
-    );
-  }
-  if (block.type === "bullet") {
-    return (
-      <div className="flex items-start gap-2 pl-1">
-        <span className="text-[13px] mt-0.5">{block.emoji}</span>
-        <p className="text-[13px] text-gray-600 leading-[1.65]">
-          <span className="font-semibold text-gray-800">{block.bold}</span>
-          {block.rest && <span> {block.rest}</span>}
-        </p>
-      </div>
-    );
-  }
-  return <p className="text-[13px] text-gray-600 leading-[1.7] pl-1">{block.content}</p>;
-}
-
-/* ===== Text Formatting Logic ===== */
-function formatAnswer(text: string): TextBlock[] {
-  if (!text) return [];
-  const lines = text.split("\n").filter(l => l.trim());
-  const blocks: TextBlock[] = [];
-  const sectionEmojis = ["📊", "💡", "📈", "⚠️", "🎯", "💰", "🔍", "📋", "✅", "🏦"];
-  let emojiIdx = 0;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    // Detect metric-like patterns: "총 평가금액: 2.5억원" or "수익률: +12.54%"
-    const metricMatch = line.match(/^[-•*]?\s*\*?\*?(.+?)\*?\*?[:：]\s*\*?\*?([\+\-]?[\d,.]+[%억만원조개]+.*?)\*?\*?$/);
-    if (metricMatch) {
-      const val = metricMatch[2].trim();
-      const isPos = val.startsWith("+") || (val.includes("%") && !val.startsWith("-") && parseFloat(val) > 0);
-      const isNeg = val.startsWith("-");
-      blocks.push({ type: "metric", label: metricMatch[1].replace(/\*\*/g, "").trim(), value: val, positive: isPos ? true : isNeg ? false : undefined });
-      continue;
-    }
-
-    // Detect headlines (bold text or first meaningful sentence)
-    const headlineMatch = line.match(/^\*\*(.+?)\*\*\.?\s*$/);
-    if (headlineMatch) {
-      blocks.push({ type: "headline", emoji: sectionEmojis[emojiIdx++ % sectionEmojis.length], text: headlineMatch[1] });
-      continue;
-    }
-
-    // Detect bullet points with bold prefix
-    const bulletBold = line.match(/^[-•*]\s*\*\*(.+?)\*\*[:：]?\s*(.*)$/);
-    if (bulletBold) {
-      const bulletEmojis = ["📌", "💎", "🔹", "▪️", "➤", "•"];
-      blocks.push({ type: "bullet", emoji: bulletEmojis[blocks.filter(b => b.type === "bullet").length % bulletEmojis.length], bold: bulletBold[1], rest: bulletBold[2].replace(/\*\*/g, "") });
-      continue;
-    }
-
-    // Detect simple bullets
-    const simpleBullet = line.match(/^[-•*]\s+(.+)$/);
-    if (simpleBullet) {
-      const content = simpleBullet[1].replace(/\*\*/g, "");
-      // Check if it contains a colon for label:value pattern
-      const colonSplit = content.match(/^(.+?)[:：]\s*(.+)$/);
-      if (colonSplit) {
-        blocks.push({ type: "bullet", emoji: "▪️", bold: colonSplit[1].trim(), rest: colonSplit[2].trim() });
-      } else {
-        blocks.push({ type: "bullet", emoji: "▪️", bold: "", rest: content });
-      }
-      continue;
-    }
-
-    // First line or lines with numbers → headline treatment
-    if (i === 0 || (i <= 2 && line.length < 60 && !line.startsWith("-"))) {
-      blocks.push({ type: "headline", emoji: sectionEmojis[emojiIdx++ % sectionEmojis.length], text: line.replace(/\*\*/g, "") });
-      continue;
-    }
-
-    // Default: regular text
-    blocks.push({ type: "text", content: line.replace(/\*\*/g, "") });
-  }
-
-  // If no headlines were created, promote first block
-  if (blocks.length > 0 && !blocks.some(b => b.type === "headline")) {
-    const first = blocks[0];
-    if (first.type === "text") {
-      blocks[0] = { type: "headline", emoji: "📊", text: first.content };
-    }
-  }
-
-  return blocks;
-}
-
-/* ===== Extract Charts from Text (when no table_data) ===== */
-type ChartItem = { type: "donut" | "hbar"; title: string; emoji: string; data: { name: string; value: number }[] };
-
-function extractChartsFromText(text: string): ChartItem[] {
-  if (!text) return [];
-  const charts: ChartItem[] = [];
-
-  // Pattern 1: "종목: 금액" or "종목(+XX%)" patterns
-  const assetValuePairs: { name: string; value: number }[] = [];
-  const assetPatterns = text.matchAll(/[-•*]\s*\*?\*?(.+?)\*?\*?[:：]\s*([\+\-]?[\d,.]+)\s*(억|만|원|%)/g);
-  for (const m of assetPatterns) {
-    let name = m[1].replace(/\*\*/g, "").trim().slice(0, 10);
-    let val = parseFloat(m[2].replace(/,/g, ""));
-    const unit = m[3];
-    if (unit === "억") val *= 1e8;
-    else if (unit === "만") val *= 1e4;
-    if (name && !isNaN(val) && val !== 0) {
-      assetValuePairs.push({ name, value: Math.abs(val) });
-    }
-  }
-
-  // Pattern 2: percentage items like "삼성전자(+4.2%)", "SK하이닉스(+3.1%)"
-  const pctPairs: { name: string; value: number }[] = [];
-  const pctPatterns = text.matchAll(/([가-힣A-Za-z0-9\s]+?)\s*[\(（]\s*([\+\-]?[\d.]+)\s*%\s*[\)）]/g);
-  for (const m of pctPatterns) {
-    const name = m[1].trim().slice(0, 10);
-    const val = parseFloat(m[2]);
-    if (name && !isNaN(val)) pctPairs.push({ name, value: val });
-  }
-
-  // Pattern 3: ratio/allocation like "국내 주식 68%, 해외 주식 18%"
-  const ratioPairs: { name: string; value: number }[] = [];
-  const ratioPatterns = text.matchAll(/([가-힣A-Za-z/\s]+?)\s*([\d.]+)\s*%/g);
-  for (const m of ratioPatterns) {
-    const name = m[1].trim().slice(0, 8);
-    const val = parseFloat(m[2]);
-    // Only collect if it looks like allocation (multiple items summing ~100%)
-    if (name && !isNaN(val) && val > 0 && val <= 100 && name.length >= 2) {
-      ratioPairs.push({ name, value: val });
-    }
-  }
-
-  // Build charts from extracted data
-  if (assetValuePairs.length >= 3) {
-    charts.push({
-      type: "hbar", title: "종목별 현황", emoji: "📊",
-      data: assetValuePairs.slice(0, 8)
-    });
-  }
-
-  if (pctPairs.length >= 3) {
-    charts.push({
-      type: "hbar", title: "종목별 수익률", emoji: "📈",
-      data: pctPairs.slice(0, 8)
-    });
-  }
-
-  // Ratio data → donut (only if it looks like allocation: 3+ items, sum > 50%)
-  const ratioSum = ratioPairs.reduce((s, d) => s + d.value, 0);
-  if (ratioPairs.length >= 3 && ratioSum > 50 && ratioSum <= 120) {
-    charts.push({
-      type: "donut", title: "자산 배분 현황", emoji: "🎯",
-      data: ratioPairs.slice(0, 8)
-    });
-  }
-
-  // If still no charts, try to create a summary chart from any numeric mentions
-  if (charts.length === 0) {
-    const anyNumbers: { name: string; value: number }[] = [];
-    const lines = text.split("\n");
-    for (const line of lines) {
-      const match = line.match(/[-•*]\s*\*?\*?([가-힣A-Za-z0-9\s]+?)\*?\*?.*?([\d,.]+)\s*(억|만|%|원)/);
-      if (match) {
-        let val = parseFloat(match[2].replace(/,/g, ""));
-        const unit = match[3];
-        if (unit === "억") val *= 100;
-        else if (unit === "만") val *= 1;
-        else if (unit === "%") val = val;
-        const name = match[1].replace(/\*\*/g, "").trim().slice(0, 10);
-        if (name && !isNaN(val) && val > 0) anyNumbers.push({ name, value: val });
-      }
-    }
-    if (anyNumbers.length >= 2) {
-      charts.push({ type: "hbar", title: "주요 지표 비교", emoji: "📋", data: anyNumbers.slice(0, 8) });
-    }
-  }
-
-  return charts;
-}
-
-
 /* ===== Inline Donut ===== */
 function InlineDonut({ data }: { data: { name: string; value: number }[] }) {
   const total = data.reduce((s, d) => s + d.value, 0);
-  // Group tiny items into "기타"
   const threshold = total * 0.03;
   const main = data.filter(d => d.value >= threshold);
   const others = data.filter(d => d.value < threshold);
@@ -522,60 +339,79 @@ function InlineBar({ data }: { data: { name: string; value: number }[] }) {
   );
 }
 
-/* ===== Build Charts from Table Data ===== */
-function buildChartsFromTable(td: TableData): ChartItem[] {
-  if (!td.columns.length || !td.rows.length) return [];
+/* ===== Chart Building from Table Data ===== */
+type ChartData = { type: "donut" | "hbar"; title: string; data: { name: string; value: number }[] };
 
+function buildCharts(td: TableData): ChartData[] {
+  if (!td.columns.length || !td.rows.length) return [];
   const numIdx = td.columns.map((_, ci) => ci).filter(ci => td.rows.some(r => { const v = r[ci]; return v !== null && v !== "" && !isNaN(Number(v)); }));
   const strIdx = td.columns.map((_, ci) => ci).filter(ci => td.rows.some(r => typeof r[ci] === "string" && isNaN(Number(r[ci]))));
-
   if (numIdx.length === 0) return [];
   const labelIdx = strIdx[0] ?? 0;
-  const charts: ChartItem[] = [];
-
+  const charts: ChartData[] = [];
   const isRatio = td.columns.some(c => c.includes("ratio") || c.includes("weight") || c.includes("비중"));
 
-  // Single row, multiple numeric = donut or metrics
   if (td.rows.length === 1 && numIdx.length >= 3 && isRatio) {
     const data = numIdx.map(ci => ({ name: toKr(td.columns[ci]), value: Math.abs(Number(td.rows[0][ci]) || 0) })).filter(d => d.value > 0);
-    if (data.length >= 2) charts.push({ type: "donut", title: "자산 배분 구성", emoji: "🎯", data });
+    if (data.length >= 2) charts.push({ type: "donut", title: "자산 배분 구성", data });
     return charts;
   }
 
-  // Multiple rows
   if (td.rows.length > 1) {
     const v1Idx = numIdx[0];
-    const data1 = td.rows.slice(0, 10).map(r => ({
-      name: String(r[labelIdx] ?? "").slice(0, 12) || "-",
-      value: Number(r[v1Idx]) || 0
-    })).filter(d => d.value !== 0 || td.rows.length <= 5);
-
+    const col1 = td.columns[v1Idx];
+    const data1 = td.rows.slice(0, 10).map(r => ({ name: String(r[labelIdx] ?? "").slice(0, 12) || "-", value: Number(r[v1Idx]) || 0 })).filter(d => d.value !== 0 || td.rows.length <= 5);
     if (data1.length >= 2) {
-      const col1 = td.columns[v1Idx];
       if (isRatio || col1.includes("weight") || col1.includes("ratio")) {
-        charts.push({ type: "donut", title: toKr(col1) + " 구성", emoji: "🎯", data: data1.map(d => ({ ...d, value: Math.abs(d.value) })) });
+        charts.push({ type: "donut", title: toKr(col1) + " 구성", data: data1.map(d => ({ ...d, value: Math.abs(d.value) })) });
       } else {
-        charts.push({ type: "hbar", title: toKr(col1) + " 비교", emoji: "📊", data: data1 });
+        charts.push({ type: "hbar", title: toKr(col1) + " 비교", data: data1 });
       }
     }
-
-    // Second numeric column → second chart
     if (numIdx.length >= 2) {
       const v2Idx = numIdx[1];
       const col2 = td.columns[v2Idx];
-      const data2 = td.rows.slice(0, 8).map(r => ({
-        name: String(r[labelIdx] ?? "").slice(0, 12) || "-",
-        value: Number(r[v2Idx]) || 0
-      })).filter(d => d.value !== 0);
-
+      const data2 = td.rows.slice(0, 8).map(r => ({ name: String(r[labelIdx] ?? "").slice(0, 12) || "-", value: Number(r[v2Idx]) || 0 })).filter(d => d.value !== 0);
       if (data2.length >= 2) {
         const isR2 = col2.includes("ratio") || col2.includes("weight") || col2.includes("rate");
-        charts.push({ type: isR2 ? "donut" : "hbar", title: toKr(col2), emoji: isR2 ? "📈" : "💰", data: data2.map(d => ({ ...d, value: Math.abs(d.value) })) });
+        charts.push({ type: isR2 ? "donut" : "hbar", title: toKr(col2), data: data2.map(d => ({ ...d, value: Math.abs(d.value) })) });
       }
     }
   }
-
   return charts;
+}
+
+/* ===== Answer Parsing ===== */
+function parseAnswer(text: string): { summary: string; details: { title: string; items: string[] }[] } {
+  if (!text) return { summary: "", details: [] };
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  let summary = "";
+  const details: { title: string; items: string[] }[] = [];
+  let cur: { title: string; items: string[] } | null = null;
+
+  for (const line of lines) {
+    const hdr = line.match(/^\*\*(.+?)\*\*:?\s*$/) || line.match(/^#{1,3}\s+(.+)/) || line.match(/^\[(.+?)\]\s*$/);
+    if (hdr) { if (cur && cur.items.length) details.push(cur); cur = { title: hdr[1].replace(/\*\*/g, "").trim(), items: [] }; continue; }
+    const bullet = line.match(/^[-•*]\s*\*?\*?(.+?)\*?\*?$/);
+    if (bullet && cur) { cur.items.push(bullet[1].replace(/\*\*/g, "").trim()); continue; }
+    if (!cur) { summary += (summary ? "\n" : "") + line.replace(/\*\*/g, ""); }
+    else { cur.items.push(line.replace(/\*\*/g, "")); }
+  }
+  if (cur && cur.items.length) details.push(cur);
+  return { summary, details };
+}
+
+/* ===== Section Style ===== */
+function getSectionStyle(title: string): { bg: string; icon: React.ReactNode } {
+  if (title.includes("리스크") || title.includes("위험") || title.includes("진단"))
+    return { bg: "#FEF2F2", icon: <Shield className="size-3.5 text-red-500" /> };
+  if (title.includes("수익") || title.includes("성과"))
+    return { bg: "#F0FDF4", icon: <TrendingUp className="size-3.5 text-emerald-500" /> };
+  if (title.includes("배분") || title.includes("비중") || title.includes("구성"))
+    return { bg: "#EFF6FF", icon: <PieIcon className="size-3.5 text-blue-500" /> };
+  if (title.includes("추천") || title.includes("제안"))
+    return { bg: "#FDF4FF", icon: <Zap className="size-3.5 text-purple-500" /> };
+  return { bg: "#F5F3FF", icon: <BarChart3 className="size-3.5 text-indigo-500" /> };
 }
 
 /* ===== History Panel ===== */
