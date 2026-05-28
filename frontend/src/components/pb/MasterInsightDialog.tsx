@@ -38,10 +38,9 @@ type Portfolio = {
 
 // ===== API Data → UI Transform =====
 const ACCENT_MAP: Record<string, string> = {
-  "공격형": "var(--neg)",
-  "장기형": "var(--info)",
-  "분석형": "var(--brand-sub)",
-  "금융상품형": "var(--brand)",
+  "공격형 투자": "var(--neg)",
+  "장기형 투자": "var(--info)",
+  "금상": "var(--brand)",
 };
 
 const SECTOR_COLORS = ["#3B5BFF", "#E22D72", "#6BB6FF", "#A0A0A0", "#222222"];
@@ -49,7 +48,7 @@ const SECTOR_COLORS = ["#3B5BFF", "#E22D72", "#6BB6FF", "#A0A0A0", "#222222"];
 function buildMasters(investors: any[]): Master[] {
   return investors.map((inv) => ({
     emoji: inv.investor_emoji ?? "📊",
-    name: `${inv.investor_type ?? "금융상품형"} 고수`,
+    name: `${inv.investor_type ?? "금상"} 고수`,
     short: inv.short_status ?? "",
     traits: inv.tags_json ? JSON.parse(inv.tags_json) : [],
     accent: ACCENT_MAP[inv.investor_type] ?? "var(--brand)",
@@ -381,7 +380,7 @@ export function MasterInsightDialog({ open, onOpenChange }: Props) {
                 <section className="space-y-3">
                   <div className="space-y-1">
                     <h3 className="text-[17px] font-extrabold tracking-tight text-foreground">고수들의 특징</h3>
-                    <p className="text-[12.5px] text-muted-foreground leading-relaxed">투자고수는 스타일에 따라 4가지 유형으로 나뉘어요</p>
+                    <p className="text-[12.5px] text-muted-foreground leading-relaxed">투자고수는 스타일에 따라 3가지 유형으로 나뉘어요</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
                     {masters.map((m) => (

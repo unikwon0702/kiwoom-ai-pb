@@ -13,7 +13,7 @@ type Master = {
 
 export function MasterInsight() {
   const [open, setOpen] = useState(false);
-  const { data, loading } = useTopInvestors(4);
+  const { data, loading } = useTopInvestors(3);
 
   const masters: Master[] = (data?.investors ?? []).map((inv: any) => ({
     rank: Number(inv.rank),

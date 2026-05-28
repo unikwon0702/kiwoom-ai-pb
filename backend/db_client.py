@@ -179,9 +179,14 @@ class DBClient:
     # ============================================================
     # Top Investors [화면6]
     # ============================================================
-    def get_top_investors(self, limit: int = 4) -> list[dict]:
+    def get_top_investors(self, limit: int = 3) -> list[dict]:
         return self._execute(f"""
-            SELECT rank, investor_type, investor_emoji,
+            WITH type_top AS (
+              SELECT *, ROW_NUMBER() OVER (PARTITION BY investor_type ORDER BY rank ASC) AS rn
+              FROM {self._t('app_top_investor_cache')}
+            )
+            SELECT ROW_NUMBER() OVER (ORDER BY rank ASC) AS rank,
+                   investor_type, investor_emoji,
                    short_status, tags_json, total_asset_krw,
                    holding_count AS avg_holdings,
                    total_return_pct,
@@ -190,7 +195,8 @@ class DBClient:
                    daily_buys_json, daily_sells_json,
                    recent_trade_date AS daily_pick_date,
                    cached_at AS cache_updated_at
-            FROM {self._t('app_top_investor_cache')}
+            FROM type_top
+            WHERE rn = 1
             ORDER BY rank ASC
             LIMIT {limit}
         """)

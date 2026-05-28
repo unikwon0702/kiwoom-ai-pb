@@ -265,6 +265,34 @@ const IMPORTANCE_SECTIONS: { title: string; rows: ToggleRow[] }[] = [
 
 function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => void }) {
   const [mode, setMode] = useState<"group" | "importance">("group");
+  const [enabled, setEnabled] = useState<Set<string>>(new Set());
+
+  // 현재 모드의 모든 라벨 목록
+  const currentLabels = (mode === "group" ? GROUP_SECTIONS : IMPORTANCE_SECTIONS)
+    .flatMap((s) => s.rows.map((r) => r.label));
+
+  const allOn = currentLabels.length > 0 && currentLabels.every((l) => enabled.has(l));
+
+  const toggleAll = (on: boolean) => {
+    setEnabled((prev) => {
+      const next = new Set(prev);
+      if (on) {
+        currentLabels.forEach((l) => next.add(l));
+      } else {
+        currentLabels.forEach((l) => next.delete(l));
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (label: string, on: boolean) => {
+    setEnabled((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(label);
+      else next.delete(label);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -284,7 +312,10 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
 
       <CategoryPillTabs />
 
-      <SelectAllRow />
+      <div className="flex items-center justify-end gap-2 px-1">
+        <span className="text-[12.5px] text-muted-foreground">전체선택</span>
+        <Switch checked={allOn} onCheckedChange={toggleAll} />
+      </div>
 
       <div className="space-y-4">
         {(mode === "group" ? GROUP_SECTIONS : IMPORTANCE_SECTIONS).map((section) => (
@@ -297,6 +328,8 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
                 <NotifyRow
                   key={row.label}
                   label={row.label}
+                  checked={enabled.has(row.label)}
+                  onCheckedChange={(on) => toggleOne(row.label, on)}
                   hasGear={row.hasGear}
                   onGearClick={row.gearAction === "price" ? onOpenPriceChange : undefined}
                 />
@@ -330,26 +363,19 @@ function CategoryPillTabs() {
   );
 }
 
-function SelectAllRow() {
-  const [on, setOn] = useState(false);
-  return (
-    <div className="flex items-center justify-end gap-2 px-1">
-      <span className="text-[12.5px] text-muted-foreground">전체선택</span>
-      <Switch checked={on} onCheckedChange={setOn} />
-    </div>
-  );
-}
-
 function NotifyRow({
   label,
+  checked,
+  onCheckedChange,
   hasGear,
   onGearClick,
 }: {
   label: string;
+  checked: boolean;
+  onCheckedChange: (on: boolean) => void;
   hasGear?: boolean;
   onGearClick?: () => void;
 }) {
-  const [on, setOn] = useState(false);
   return (
     <div className="flex items-center justify-between px-3.5 py-3">
       <span className="text-[13.5px] text-foreground/90">{label}</span>
@@ -363,7 +389,7 @@ function NotifyRow({
             <SettingsIcon className="size-4" />
           </button>
         )}
-        <Switch checked={on} onCheckedChange={setOn} />
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
       </div>
     </div>
   );
