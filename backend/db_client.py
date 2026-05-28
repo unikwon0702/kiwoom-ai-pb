@@ -194,3 +194,15 @@ class DBClient:
             ORDER BY rank ASC
             LIMIT {limit}
         """)
+
+    # ============================================================
+    # Customer Interests (관심종목 설정)
+    # ============================================================
+    def get_customer_interests(self, customer_id: str) -> list[dict]:
+        return self._execute(f"""
+            SELECT asset_name, asset_type, asset_subtype,
+                   interest_type, display_rank, already_held_yn
+            FROM {self._t('gd_customer_interest_serving')}
+            WHERE customer_id = '{customer_id}'
+            ORDER BY display_rank ASC
+        """)

@@ -360,7 +360,7 @@ function buildCharts(td: TableData): ChartData[] {
   if (td.rows.length > 1) {
     const v1Idx = numIdx[0];
     const col1 = td.columns[v1Idx];
-    const data1 = td.rows.slice(0, 10).map(r => ({ name: String(r[labelIdx] ?? "").slice(0, 12) || "-", value: Number(r[v1Idx]) || 0 })).filter(d => d.value !== 0 || td.rows.length <= 5);
+    const data1 = td.rows.slice(0, 10).map(r => ({ name: String(r[labelIdx] ?? "") || "-", value: Number(r[v1Idx]) || 0 })).filter(d => d.value !== 0 || td.rows.length <= 5);
     if (data1.length >= 2) {
       if (isRatio || col1.includes("weight") || col1.includes("ratio")) {
         charts.push({ type: "donut", title: toKr(col1) + " 구성", data: data1.map(d => ({ ...d, value: Math.abs(d.value) })) });
@@ -371,7 +371,7 @@ function buildCharts(td: TableData): ChartData[] {
     if (numIdx.length >= 2) {
       const v2Idx = numIdx[1];
       const col2 = td.columns[v2Idx];
-      const data2 = td.rows.slice(0, 8).map(r => ({ name: String(r[labelIdx] ?? "").slice(0, 12) || "-", value: Number(r[v2Idx]) || 0 })).filter(d => d.value !== 0);
+      const data2 = td.rows.slice(0, 8).map(r => ({ name: String(r[labelIdx] ?? "") || "-", value: Number(r[v2Idx]) || 0 })).filter(d => d.value !== 0);
       if (data2.length >= 2) {
         const isR2 = col2.includes("ratio") || col2.includes("weight") || col2.includes("rate");
         charts.push({ type: isR2 ? "donut" : "hbar", title: toKr(col2), data: data2.map(d => ({ ...d, value: Math.abs(d.value) })) });

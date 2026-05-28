@@ -93,6 +93,13 @@ def get_top_investor(limit: int = Query(default=4, le=20)):
     return {"investors": db.get_top_investors(limit)}
 
 
+
+@app.get("/api/customer-interests")
+def get_customer_interests(customer_id: str = Query(...)):
+    """설정 > 관심종목 목록 (고객별)"""
+    return {"interests": db.get_customer_interests(customer_id)}
+
+
 # ===== Chat API (Genie Space) =====
 
 class ChatRequest(BaseModel):

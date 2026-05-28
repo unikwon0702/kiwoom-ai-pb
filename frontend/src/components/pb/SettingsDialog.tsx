@@ -13,17 +13,27 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Star, Plus, X, Settings as SettingsIcon, Info, Trash2, Minus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useCustomer } from "@/lib/customer-context";
+import { api } from "@/lib/api";
 
 type Item = { category: string; name: string };
 
-const INITIAL: Item[] = [
-  { category: "주식", name: "삼성전자" },
-  { category: "주식", name: "엔비디아 (NVDA)" },
-  { category: "ETF", name: "TIGER 미국S&P500" },
-  { category: "펀드", name: "KCGI코리아투자증권투자신탁" },
-  { category: "채권", name: "국고채 10년" },
-];
+function mapAssetType(assetType: string): string {
+  switch (assetType) {
+    case "해외주식":
+    case "국내주식":
+      return "주식";
+    case "ETF":
+      return "ETF";
+    case "펀드":
+      return "펀드";
+    case "채권":
+      return "채권";
+    default:
+      return assetType;
+  }
+}
 
 function categoryBadgeClass(category: string) {
   switch (category) {
@@ -46,8 +56,10 @@ type Props = {
 };
 
 export function SettingsDialog({ open, onOpenChange }: Props) {
-  const [watchlist, setWatchlist] = useState<Item[]>(INITIAL);
-  const [added, setAdded] = useState<Set<string>>(new Set(INITIAL.map((i) => i.name)));
+  const { customer } = useCustomer();
+  const [watchlist, setWatchlist] = useState<Item[]>([]);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<Item | null>(null);
 
   // 알림설정 - 종목 당일 시세 변동 설정 팝업
@@ -55,6 +67,27 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   const [priceItems, setPriceItems] = useState<{ code: string; name: string; value: number }[]>([
     { code: "005930", name: "삼성전자", value: 0.8 },
   ]);
+
+  // 고객 변경 또는 다이얼로그 열릴 때 관심종목 조회
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    api
+      .getCustomerInterests(customer.id)
+      .then((data) => {
+        const items: Item[] = data.interests.map((i) => ({
+          category: mapAssetType(i.asset_type),
+          name: i.asset_name,
+        }));
+        setWatchlist(items);
+        setAdded(new Set(items.map((i) => i.name)));
+      })
+      .catch(() => {
+        setWatchlist([]);
+        setAdded(new Set());
+      })
+      .finally(() => setLoading(false));
+  }, [open, customer.id]);
 
   const confirmRemove = () => {
     if (!pendingRemove) return;
@@ -102,38 +135,44 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                 </TabsList>
 
                 <TabsContent value="watchlist" className="space-y-2">
-                  {watchlist.length === 0 && (
+                  {loading && (
+                    <p className="text-center text-[13px] text-muted-foreground py-8">
+                      불러오는 중...
+                    </p>
+                  )}
+                  {!loading && watchlist.length === 0 && (
                     <p className="text-center text-[13px] text-muted-foreground py-8">
                       관심종목이 없어요
                     </p>
                   )}
-                  {watchlist.map((item) => (
-                    <div
-                      key={item.name}
-                      className="flex items-center justify-between rounded-xl border border-border/60 px-3.5 py-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${categoryBadgeClass(item.category)}`}>
-                          {item.category}
-                        </span>
-                        <span className="text-[14px] font-semibold text-foreground truncate">
-                          {item.name}
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => toggleAdded(item)}
-                        aria-label={added.has(item.name) ? "관심종목 제거" : "관심종목 추가"}
-                        className={`shrink-0 flex items-center gap-1 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
-                          added.has(item.name)
-                            ? "bg-[color:var(--brand-sub)] text-white border-[color:var(--brand-sub)]"
-                            : "bg-card text-foreground/80 border-border/60 hover:bg-muted/40"
-                        }`}
+                  {!loading &&
+                    watchlist.map((item) => (
+                      <div
+                        key={item.name}
+                        className="flex items-center justify-between rounded-xl border border-border/60 px-3.5 py-3"
                       >
-                        {added.has(item.name) ? <Star className="size-3 fill-current" /> : <Plus className="size-3" />}
-                        관심
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${categoryBadgeClass(item.category)}`}>
+                            {item.category}
+                          </span>
+                          <span className="text-[14px] font-semibold text-foreground truncate">
+                            {item.name}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => toggleAdded(item)}
+                          aria-label={added.has(item.name) ? "관심종목 제거" : "관심종목 추가"}
+                          className={`shrink-0 flex items-center gap-1 text-[11.5px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
+                            added.has(item.name)
+                              ? "bg-[color:var(--brand-sub)] text-white border-[color:var(--brand-sub)]"
+                              : "bg-card text-foreground/80 border-border/60 hover:bg-muted/40"
+                          }`}
+                        >
+                          {added.has(item.name) ? <Star className="size-3 fill-current" /> : <Plus className="size-3" />}
+                          관심
+                        </button>
+                      </div>
+                    ))}
                 </TabsContent>
 
                 <TabsContent value="notifications" className="space-y-2">
