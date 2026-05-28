@@ -59,11 +59,13 @@ class GenieChatClient:
     def _inject_context(self, question, customer_id, customer_name):
         if not customer_id:
             return question
+        display_name = customer_name or customer_id
         ctx = f"[SELECTED_CUSTOMER_CONTEXT]\ncustomer_id: {customer_id}\n"
         if customer_name:
             ctx += f"customer_name: {customer_name}\n"
         ctx += f"[/SELECTED_CUSTOMER_CONTEXT]\n\n"
-        ctx += f"위 고객의 customer_id를 기준으로 답변해주세요. 반드시 WHERE customer_id = '{customer_id}' 조건을 사용하세요.\n\n"
+        ctx += f"조회 조건: 반드시 WHERE customer_id = '{customer_id}' 조건을 사용하세요.\n"
+        ctx += f"답변 규칙: 답변에서 고객을 지칭할 때 customer_id(CUST0010 등)를 절대 노출하지 마세요. 반드시 '{display_name}' 또는 '{display_name}님'으로만 표현하세요.\n\n"
         ctx += f"사용자 질문:\n{question}"
         return ctx
 
@@ -83,22 +85,58 @@ class GenieChatClient:
         return {"status": "timeout", "answer": "응답 시간 초과 (60초)", "sql": None, "table_data": None, "conversation_id": conv_id}
 
     def _parse(self, response, conv_id):
-        answer = response.get('content', '')
+        answer = ''
         sql = None
         table_data = None
+        statement_id = None
+
         for att in response.get('attachments', []):
-            if att.get('type') == 'QUERY' or 'query' in att:
-                q = att.get('query', att)
+            # SQL query + statement_id
+            if 'query' in att:
+                q = att['query']
                 sql = q.get('query', q.get('sql', ''))
-                if 'result' in q:
-                    table_data = q['result']
-                elif 'data' in q:
-                    table_data = q['data']
-            elif att.get('type') == 'TEXT' or 'text' in att:
+                statement_id = q.get('statement_id')
+            # Text answer
+            elif 'text' in att:
                 text = att.get('text', {}).get('content', '')
                 if text:
                     answer = text
-            elif att.get('type') == 'QUERY_RESULT' or 'query_result' in att:
-                qr = att.get('query_result', att)
-                table_data = {'columns': qr.get('columns', []), 'rows': qr.get('data_array', qr.get('rows', []))}
-        return {"status": "success", "answer": answer, "sql": sql, "table_data": table_data, "conversation_id": conv_id}
+
+        # Also check top-level query_result for statement_id
+        qr = response.get('query_result', {})
+        if not statement_id and qr.get('statement_id'):
+            statement_id = qr['statement_id']
+
+        # Fetch actual table data via SQL Statements API
+        if statement_id:
+            table_data = self._fetch_statement_result(statement_id)
+
+        if not answer:
+            answer = response.get('content', '')
+
+        return {
+            "status": "success",
+            "answer": answer,
+            "sql": sql,
+            "table_data": table_data,
+            "conversation_id": conv_id
+        }
+
+    def _fetch_statement_result(self, statement_id: str) -> dict | None:
+        """SQL Statements API에서 쿼리 결과 데이터를 가져옵니다."""
+        try:
+            stmt = self.w.api_client.do(
+                'GET',
+                f'/api/2.0/sql/statements/{statement_id}'
+            )
+            manifest = stmt.get('manifest', {})
+            result = stmt.get('result', {})
+
+            columns = [col.get('name', '') for col in manifest.get('schema', {}).get('columns', [])]
+            rows = result.get('data_array', [])
+
+            if columns and rows:
+                return {"columns": columns, "rows": rows}
+        except Exception:
+            pass
+        return None
