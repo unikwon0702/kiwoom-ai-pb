@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, X, Info, Send, Menu, Mic } from "lucide-react";
+import { ChevronLeft, X, Info, Send, Menu, Mic, User } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
 
@@ -7,9 +7,14 @@ export const Route = createFileRoute("/chat")({
   component: ChatPage,
 });
 
+type TableData = {
+  columns: string[];
+  rows: (string | number | null)[][];
+};
+
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string };
+  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null };
 
 const HISTORY_KEY = "aipb_chat_questions";
 
@@ -38,17 +43,17 @@ function ChatPage() {
   }, [messages]);
 
   const sendQuestion = async (text: string) => {
+    if (!customer?.id) {
+      setMessages((prev) => [...prev, { role: "bot", text: "고객을 먼저 선택해주세요." }]);
+      return;
+    }
+
     setMessages((prev) => [...prev, { role: "user", text }]);
     setLoading(true);
 
-    // 히스토리 저장
     setHistory((prev) => {
       const next = [text, ...prev.filter((q) => q !== text)].slice(0, 30);
-      try {
-        window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
+      try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
 
@@ -59,22 +64,39 @@ function ChatPage() {
         body: JSON.stringify({
           question: text,
           customer_id: customer.id,
+          customer_name: customer.name,
           conversation_id: conversationId,
         }),
       });
       if (!res.ok) {
-        throw new Error(await res.text() || `HTTP ${res.status}`);
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
       }
       const data = await res.json();
       setConversationId(data.conversation_id);
+
+      // Parse table_data if present
+      let tableData: TableData | null = null;
+      if (data.table_data) {
+        const td = data.table_data;
+        if (td.columns && td.rows) {
+          tableData = { columns: td.columns, rows: td.rows };
+        } else if (td.data_array && td.schema) {
+          tableData = {
+            columns: td.schema.map((c: any) => c.name || c),
+            rows: td.data_array,
+          };
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: data.answer },
+        { role: "bot", text: data.answer || "응답을 받았지만 내용이 비어있어요.", sql: data.sql, tableData },
       ]);
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: `죄송해요, 응답 중 오류가 발생했어요: ${e.message}` },
+        { role: "bot", text: `오류: ${e.message}` },
       ]);
     } finally {
       setLoading(false);
@@ -82,35 +104,25 @@ function ChatPage() {
   };
 
   const handleSend = () => {
-    const userText = input.trim();
-    if (!userText) return;
+    const t = input.trim();
+    if (!t) return;
     setInput("");
-    sendQuestion(userText);
+    sendQuestion(t);
   };
 
   const hasMessages = messages.length > 0;
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#E9EFFE" }}>
-      <div
-        className="max-w-[480px] mx-auto min-h-screen flex flex-col"
-        style={{ backgroundColor: "#E9EFFE" }}
-      >
-        <header
-          className="sticky top-0 z-10 backdrop-blur-md"
-          style={{ backgroundColor: "#606CF2" }}
-        >
+      <div className="max-w-[480px] mx-auto min-h-screen flex flex-col" style={{ backgroundColor: "#E9EFFE" }}>
+        <header className="sticky top-0 z-10 backdrop-blur-md" style={{ backgroundColor: "#606CF2" }}>
           <div className="flex items-center justify-between px-3 h-14">
             <Link to="/" className="size-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white">
               <ChevronLeft className="size-5" />
             </Link>
             <span className="text-[16px] font-semibold tracking-tight text-white">AI PB 챗봇</span>
             <div className="flex items-center">
-              <button
-                onClick={() => setMenuOpen(true)}
-                aria-label="질문 히스토리"
-                className="size-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white"
-              >
+              <button onClick={() => setMenuOpen(true)} aria-label="질문 히스토리" className="size-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white">
                 <Menu className="size-5" />
               </button>
               <Link to="/" className="size-9 flex items-center justify-center rounded-full hover:bg-white/10 text-white">
@@ -118,49 +130,36 @@ function ChatPage() {
               </Link>
             </div>
           </div>
+          {/* 고객 컨텍스트 표시 */}
+          <div className="flex items-center gap-2 px-4 pb-2">
+            <User className="size-3.5 text-white/70" />
+            <span className="text-[12px] text-white/80">{customer.name} 고객님 기준 답변</span>
+          </div>
         </header>
 
-        <HistoryPanel
-          open={menuOpen}
-          onClose={() => setMenuOpen(false)}
-          history={history}
-          onSelect={(q) => {
-            setMenuOpen(false);
-            sendQuestion(q);
-          }}
-          onClear={() => {
-            setHistory([]);
-            try {
-              window.localStorage.removeItem(HISTORY_KEY);
-            } catch {
-              // ignore
-            }
-          }}
+        <HistoryPanel open={menuOpen} onClose={() => setMenuOpen(false)} history={history}
+          onSelect={(q) => { setMenuOpen(false); sendQuestion(q); }}
+          onClear={() => { setHistory([]); try { window.localStorage.removeItem(HISTORY_KEY); } catch {} }}
         />
-
 
         <main className="flex-1 px-5 pt-6 pb-4">
           <p className="text-[16px] leading-[1.55] text-foreground">
             AI 자산관리챗봇 <span className="font-bold text-[#606CF2]">AI PB</span>입니다.
             <br />
-            무엇을 알려드릴까요?
+            {customer.name} 고객님의 데이터를 기준으로 답변해드려요.
           </p>
           <button className="mt-3 inline-flex items-center gap-1 text-[12.5px] text-muted-foreground/80">
-            AI PB 서비스 이용 유의사항
-            <Info className="size-3.5" />
+            AI PB 서비스 이용 유의사항 <Info className="size-3.5" />
           </button>
 
           {!hasMessages && (
             <div className="mt-6">
               <p className="text-[12.5px] text-muted-foreground/80 mb-2">이런 걸 물어볼 수 있어요</p>
               <div className="flex flex-wrap gap-2">
-                {["종목 진단 해줘", "내 포트폴리오 분석해줘", "오늘 시장 이슈 알려줘", "지금 사도 될까?"].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => sendQuestion(q)}
+                {["내 포트폴리오 수익률은?", "보유 종목별 손익 알려줘", "내 자산 배분 현황은?", "최근 투자 변동 요약해줘"].map((q) => (
+                  <button key={q} onClick={() => sendQuestion(q)}
                     className="text-[13px] px-3.5 py-2 rounded-full bg-white border text-foreground hover:bg-white/80 transition-colors"
-                    style={{ borderColor: "#C9D3F5" }}
-                  >
+                    style={{ borderColor: "#C9D3F5" }}>
                     {q}
                   </button>
                 ))}
@@ -173,23 +172,18 @@ function ChatPage() {
               {messages.map((m, i) =>
                 m.role === "user" ? (
                   <div key={i} className="flex justify-end">
-                    <div
-                      className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-[14px] leading-[1.5] text-white"
-                      style={{ backgroundColor: "#606CF2" }}
-                    >
+                    <div className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-[14px] leading-[1.5] text-white" style={{ backgroundColor: "#606CF2" }}>
                       {m.text}
                     </div>
                   </div>
                 ) : (
-                  <div key={i} className="flex justify-start">
-                    <div className="max-w-[90%] text-[14px] leading-[1.55] text-foreground whitespace-pre-wrap">{m.text}</div>
-                  </div>
+                  <BotMessage key={i} msg={m} customerName={customer.name} />
                 ),
               )}
               {loading && (
                 <div className="flex justify-start">
                   <div className="max-w-[90%] text-[14px] leading-[1.55] text-muted-foreground animate-pulse">
-                    💭 답변 생성 중...
+                    💭 {customer.name} 고객님 데이터 조회 중...
                   </div>
                 </div>
               )}
@@ -201,29 +195,15 @@ function ChatPage() {
         <div className="sticky bottom-0 px-4 pb-5 pt-3" style={{ backgroundColor: "#E9EFFE" }}>
           <div className="rounded-full p-px bg-gradient-to-r from-[#C9B5FF] via-[#A8C5FF] to-[#FFB8D8]">
             <div className="flex items-center gap-2 rounded-full bg-white pl-2 pr-1.5 py-1.5">
-              <button
-                type="button"
-                aria-label="음성 입력"
-                className="size-9 rounded-full flex items-center justify-center text-foreground/70 hover:bg-muted"
-              >
+              <button type="button" aria-label="음성 입력" className="size-9 rounded-full flex items-center justify-center text-foreground/70 hover:bg-muted">
                 <Mic className="size-[18px]" />
               </button>
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSend();
-                }}
+              <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
                 placeholder="AI PB에게 물어보세요"
                 className="flex-1 bg-transparent text-[14px] text-foreground placeholder:text-muted-foreground/70 outline-none py-2"
               />
-
-              <button
-                onClick={handleSend}
-                aria-label="전송"
-                className="size-9 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-[#C9B5FF] via-[#A8C5FF] to-[#FFB8D8]"
-              >
+              <button onClick={handleSend} aria-label="전송" className="size-9 rounded-full flex items-center justify-center text-white bg-gradient-to-r from-[#C9B5FF] via-[#A8C5FF] to-[#FFB8D8]">
                 <Send className="size-4" />
               </button>
             </div>
@@ -234,59 +214,93 @@ function ChatPage() {
   );
 }
 
-function HistoryPanel({
-  open,
-  onClose,
-  history,
-  onSelect,
-  onClear,
-}: {
-  open: boolean;
-  onClose: () => void;
-  history: string[];
-  onSelect: (q: string) => void;
-  onClear: () => void;
+/* ===== Bot Message with Rich Rendering ===== */
+function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
+  const hasTable = msg.tableData && msg.tableData.columns.length > 0 && msg.tableData.rows.length > 0;
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[95%] space-y-2">
+        {/* Text answer */}
+        <div className="text-[14px] leading-[1.6] text-foreground whitespace-pre-wrap">
+          {msg.text}
+        </div>
+
+        {/* Table rendering */}
+        {hasTable && (
+          <div className="rounded-xl bg-white border border-border/50 shadow-sm overflow-hidden">
+            <div className="px-3 py-2 bg-[#F8F9FF] border-b border-border/30">
+              <span className="text-[11px] font-medium text-muted-foreground">📊 조회 결과</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="border-b border-border/30">
+                    {msg.tableData!.columns.map((col, ci) => (
+                      <th key={ci} className="px-3 py-2 text-left font-semibold text-foreground/80 whitespace-nowrap">
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {msg.tableData!.rows.slice(0, 20).map((row, ri) => (
+                    <tr key={ri} className="border-b border-border/20 last:border-0">
+                      {row.map((cell, ci) => (
+                        <td key={ci} className="px-3 py-1.5 text-foreground/85 whitespace-nowrap">
+                          {cell ?? "-"}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {msg.tableData!.rows.length > 20 && (
+              <div className="px-3 py-1.5 text-[11px] text-muted-foreground text-center border-t border-border/30">
+                외 {msg.tableData!.rows.length - 20}건 더
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SQL display (collapsed) */}
+        {msg.sql && (
+          <details className="text-[11px]">
+            <summary className="text-muted-foreground/60 cursor-pointer hover:text-muted-foreground">실행된 SQL 보기</summary>
+            <pre className="mt-1 p-2 rounded-lg bg-[#1e1e2e] text-[#cdd6f4] text-[10px] overflow-x-auto leading-relaxed">
+              {msg.sql}
+            </pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===== History Panel ===== */
+function HistoryPanel({ open, onClose, history, onSelect, onClear }: {
+  open: boolean; onClose: () => void; history: string[]; onSelect: (q: string) => void; onClear: () => void;
 }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">
-      <button
-        aria-label="닫기"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <aside
-        className="absolute right-0 top-0 h-full w-[82%] max-w-[360px] bg-white shadow-xl flex flex-col"
-        role="dialog"
-        aria-label="질문 히스토리"
-      >
-        <div
-          className="flex items-center justify-between px-4 h-14 border-b"
-          style={{ borderColor: "#E4EAFB" }}
-        >
+      <button aria-label="닫기" onClick={onClose} className="absolute inset-0 bg-black/40" />
+      <aside className="absolute right-0 top-0 h-full w-[82%] max-w-[360px] bg-white shadow-xl flex flex-col" role="dialog" aria-label="질문 히스토리">
+        <div className="flex items-center justify-between px-4 h-14 border-b" style={{ borderColor: "#E4EAFB" }}>
           <h2 className="text-[15px] font-semibold text-foreground">최근 질문</h2>
-          <button
-            onClick={onClose}
-            aria-label="닫기"
-            className="size-9 flex items-center justify-center rounded-full hover:bg-black/5 text-foreground/80"
-          >
+          <button onClick={onClose} aria-label="닫기" className="size-9 flex items-center justify-center rounded-full hover:bg-black/5 text-foreground/80">
             <X className="size-5" />
           </button>
         </div>
-
         <div className="flex-1 overflow-y-auto px-2 py-3">
           {history.length === 0 ? (
-            <p className="px-3 py-6 text-[13px] text-muted-foreground text-center">
-              아직 질문 내역이 없어요.
-            </p>
+            <p className="px-3 py-6 text-[13px] text-muted-foreground text-center">아직 질문 내역이 없어요.</p>
           ) : (
             <ul className="space-y-1">
               {history.map((q, i) => (
                 <li key={`${q}-${i}`}>
-                  <button
-                    onClick={() => onSelect(q)}
-                    className="w-full text-left px-3 py-2.5 rounded-lg text-[13.5px] leading-[1.5] text-foreground hover:bg-[#F2F5FE] transition-colors"
-                  >
+                  <button onClick={() => onSelect(q)} className="w-full text-left px-3 py-2.5 rounded-lg text-[13.5px] leading-[1.5] text-foreground hover:bg-[#F2F5FE] transition-colors">
                     {q}
                   </button>
                 </li>
@@ -294,15 +308,9 @@ function HistoryPanel({
             </ul>
           )}
         </div>
-
         {history.length > 0 && (
           <div className="px-4 py-3 border-t" style={{ borderColor: "#E4EAFB" }}>
-            <button
-              onClick={onClear}
-              className="w-full text-[13px] text-muted-foreground hover:text-foreground py-2"
-            >
-              전체 기록 삭제
-            </button>
+            <button onClick={onClear} className="w-full text-[13px] text-muted-foreground hover:text-foreground py-2">전체 기록 삭제</button>
           </div>
         )}
       </aside>

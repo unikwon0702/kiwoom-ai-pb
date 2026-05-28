@@ -98,12 +98,21 @@ def get_top_investor(limit: int = Query(default=4, le=20)):
 class ChatRequest(BaseModel):
     question: str
     conversation_id: str | None = None
+    customer_id: str | None = None
+    customer_name: str | None = None
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    """AI PB 챗봇 - Genie Space 대화"""
-    return genie.ask(req.question, req.conversation_id)
+    """AI PB 챗봇 - Genie Space 대화 (고객 컨텍스트 포함)"""
+    if not req.customer_id:
+        raise HTTPException(400, "customer_id는 필수입니다. 고객을 먼저 선택해주세요.")
+    return genie.ask(
+        question=req.question,
+        conversation_id=req.conversation_id,
+        customer_id=req.customer_id,
+        customer_name=req.customer_name,
+    )
 
 
 # ===== React SPA Static Serving =====
