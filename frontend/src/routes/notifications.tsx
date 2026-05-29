@@ -159,7 +159,7 @@ function NotificationsPage() {
 
   const marketItems: Market[] = (marketsRaw?.events ?? []).map((e: any, i: number) => ({
     title: e.event_title ?? '',
-    time: getDisplayTime(e.published_at, i),
+    time: getDisplayTime(e.published_at, i + 5),
     desc: e.ai_investment_view ?? e.related_sector ?? '',
     hashtags: [e.related_sector, e.event_type].filter(Boolean) as string[],
     relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
@@ -167,7 +167,7 @@ function NotificationsPage() {
 
   const scheduleItems: Schedule[] = (schedulesRaw?.schedules ?? []).map((s: any, i: number) => ({
     dTag: `D-${i + 1}`,
-    date: getDisplayTime(s.published_at, i),
+    date: getDisplayTime(s.published_at, i + 9),
     title: s.event_title ?? '',
     desc: s.event_summary ?? '',
   }));
