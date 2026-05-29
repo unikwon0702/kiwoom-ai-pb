@@ -120,7 +120,8 @@ class DBClient:
                    sentiment_score, impacted_asset_count,
                    impacted_assets_json, published_at
             FROM {self._t('app_cache_news_feed')}
-            WHERE event_type IN ('금리정책', '매크로지표', '산업이벤트', '외교이벤트', '실적발표')
+            WHERE ai_investment_view IS NOT NULL
+              AND impacted_assets_json IS NOT NULL
             ORDER BY sort_timestamp DESC
             LIMIT {limit}
         """)
@@ -284,17 +285,26 @@ class DBClient:
             LIMIT 1
         """)
 
-        # 4. 고수 매매
-        masters_buy = self._execute(f"""
-            SELECT investor_type, investor_emoji
+        # 4. 고수 매매 (유형별 다수결 → 유형당 1개 액션만)
+        all_types_info = [
+            {"investor_type": "공격형 투자", "investor_emoji": "🔥"},
+            {"investor_type": "장기형 투자", "investor_emoji": "💎"},
+            {"investor_type": "금상", "investor_emoji": "📊"},
+        ]
+        buy_counts = self._execute(f"""
+            SELECT investor_type, COUNT(*) as cnt
             FROM {self._t('app_top_investor_cache')}
-            WHERE daily_buys_json LIKE '%{asset_name}%' LIMIT 5
+            WHERE daily_buys_json LIKE '%{asset_name}%'
+            GROUP BY investor_type
         """)
-        masters_sell = self._execute(f"""
-            SELECT investor_type, investor_emoji
+        sell_counts = self._execute(f"""
+            SELECT investor_type, COUNT(*) as cnt
             FROM {self._t('app_top_investor_cache')}
-            WHERE daily_sells_json LIKE '%{asset_name}%' LIMIT 5
+            WHERE daily_sells_json LIKE '%{asset_name}%'
+            GROUP BY investor_type
         """)
+        buy_map = {r['investor_type']: int(r['cnt']) for r in buy_counts}
+        sell_map = {r['investor_type']: int(r['cnt']) for r in sell_counts}
 
         # 5. 과거 이벤트
         events = self._execute(f"""
@@ -331,16 +341,25 @@ class DBClient:
                 "caption": f"최근 한 달간 {asset_name}의 수익률 변동 추이예요."
             }
 
-        # 고수
+        # 고수 (3유형 각 1개씩, 다수결 기준)
         masters = []
-        for m in masters_buy:
-            masters.append({"emoji": m.get('investor_emoji', '🔥'), "name": m.get('investor_type', '고수'), "note": "매수 진행", "action": "매수"})
-        for m in masters_sell:
-            masters.append({"emoji": m.get('investor_emoji', '💎'), "name": m.get('investor_type', '고수'), "note": "일부 매도", "action": "매도"})
-        buy_count = len(masters_buy)
-        sell_count = len(masters_sell)
+        buy_count = 0
+        sell_count = 0
+        for t in all_types_info:
+            tname = t['investor_type']
+            b = buy_map.get(tname, 0)
+            s = sell_map.get(tname, 0)
+            if b > s:
+                masters.append({"emoji": t['investor_emoji'], "name": tname, "note": "매수 진행", "action": "매수"})
+                buy_count += 1
+            elif s > b:
+                masters.append({"emoji": t['investor_emoji'], "name": tname, "note": "일부 매도", "action": "매도"})
+                sell_count += 1
+            else:
+                masters.append({"emoji": t['investor_emoji'], "name": tname, "note": "관망 중", "action": "매수"})
+                buy_count += 1
         total = buy_count + sell_count
-        poll_label = "전원 매수" if sell_count == 0 and buy_count > 0 else "매수 우위" if buy_count > sell_count else "매도 우위" if sell_count > buy_count else "균형"
+        poll_label = "전원 매수" if sell_count == 0 else "매수 우위" if buy_count > sell_count else "매도 우위" if sell_count > buy_count else "균형"
 
         # 과거 사례
         history = []

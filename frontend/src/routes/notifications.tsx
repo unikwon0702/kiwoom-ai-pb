@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { Fragment, useState } from "react";
 import { tagClassName } from "@/components/pb/tag-style";
 import { HoldingDetailDialog } from "@/components/pb/HoldingDetailDialog";
-import { MarketEventDialog } from "@/components/pb/MarketEventDialog";
+import { EventDetailDialog } from "@/components/pb/EventDetailDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
 import { getDisplayTime } from "@/lib/date";
@@ -303,7 +303,7 @@ function NotificationsPage() {
           aiPbSummary="고수 1명 중 0명이 매수에 무게를 두며 단기 추가 매수 흐름이 우세해요."
           masters={[{ emoji: "🏅", name: "금상 고수", note: "일부 환매", action: "매도" }]}
         />
-        <MarketEventDialog open={openOil} onOpenChange={setOpenOil} />
+        <EventDetailDialog open={openOil} onOpenChange={setOpenOil} eventId={null} />
       </div>
     </div>
   );

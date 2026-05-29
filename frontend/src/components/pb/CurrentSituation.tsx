@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { tagClassName } from "./tag-style";
 import { HoldingDetailDialog } from "./HoldingDetailDialog";
-import { MarketEventDialog } from "./MarketEventDialog";
+import { EventDetailDialog } from "./EventDetailDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
 import { api } from "@/lib/api";
@@ -30,6 +30,7 @@ type Holding = {
 };
 
 type Market = {
+  eventId: string;
   title: string;
   time: string;
   desc: string;
@@ -59,6 +60,7 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   }));
 
   const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => ({
+    eventId: e.event_id ?? '',
     title: e.event_title ?? '',
     time: getDisplayTime(e.published_at, i + 5),
     desc: e.ai_investment_view ?? e.related_sector ?? '',
@@ -200,27 +202,7 @@ export function CurrentSituation() {
       .catch(() => setHoldingDetailProps(null))
       .finally(() => setHoldingDetailLoading(false));
   }, [activeHolding, customer.id, prefetchCache]);
-  const [openOil, setOpenOil] = useState(false);
-  const [openDefense, setOpenDefense] = useState(false);
-  const [openStarbucks, setOpenStarbucks] = useState(false);
-  const marketOpen = openOil || openDefense || openStarbucks;
-  const activeVariant: "oil" | "defense" | "starbucks" = openDefense
-    ? "defense"
-    : openStarbucks
-    ? "starbucks"
-    : "oil";
-  const activeTitle = openDefense
-    ? "정부 방산 산업 투자 확대 결정"
-    : openStarbucks
-    ? "스타벅스 마케팅 논란 확산"
-    : "국제 유가 +2.4% 상승";
-  const handleMarketOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpenOil(false);
-      setOpenDefense(false);
-      setOpenStarbucks(false);
-    }
-  };
+  const [activeMarketEventId, setActiveMarketEventId] = useState<string | null>(null);
   void navigate;
 
   const handleHoldingClick = (it: Holding) => {
@@ -228,9 +210,7 @@ export function CurrentSituation() {
   };
 
   const handleMarketClick = (it: Market) => {
-    if (it.title === "국제 유가 +2.4%") setOpenOil(true);
-    else if (it.title === "정부 방산 산업 투자 확대 결정") setOpenDefense(true);
-    else if (it.title === "스타벅스 마케팅 논란 확산") setOpenStarbucks(true);
+    setActiveMarketEventId(it.eventId);
   };
 
 
@@ -333,12 +313,10 @@ export function CurrentSituation() {
           />
         );
       })()}
-      <MarketEventDialog
-        key={activeVariant}
-        open={marketOpen}
-        onOpenChange={handleMarketOpenChange}
-        title={activeTitle}
-        variant={activeVariant}
+      <EventDetailDialog
+        open={!!activeMarketEventId}
+        onOpenChange={(o) => { if (!o) setActiveMarketEventId(null); }}
+        eventId={activeMarketEventId}
       />
     </div>
   );
