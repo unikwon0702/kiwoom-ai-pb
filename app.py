@@ -94,6 +94,16 @@ def get_top_investor(limit: int = Query(default=4, le=20)):
 
 
 
+
+@app.get("/api/event-detail")
+def get_event_detail(event_id: str = Query(...)):
+    """뉴스/이벤트 상세"""
+    data = db.get_event_detail(event_id)
+    if not data:
+        raise HTTPException(404, f"Event {event_id} not found")
+    return data
+
+
 @app.get("/api/customer-interests")
 def get_customer_interests(customer_id: str = Query(...)):
     """설정 > 관심종목 목록 (고객별)"""
