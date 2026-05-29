@@ -15,8 +15,8 @@ export function MasterInsight() {
   const [open, setOpen] = useState(false);
   const { data, loading } = useTopInvestors(3);
 
-  const masters: Master[] = (data?.investors ?? []).map((inv: any) => ({
-    rank: Number(inv.rank),
+  const masters: Master[] = (data?.investors ?? []).map((inv: any, i: number) => ({
+    rank: i + 1,
     emoji: inv.investor_emoji ?? '📊',
     name: `${inv.investor_type} 고수`,
     status: inv.short_status ?? '',
