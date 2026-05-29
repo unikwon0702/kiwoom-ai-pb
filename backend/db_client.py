@@ -179,14 +179,9 @@ class DBClient:
     # ============================================================
     # Top Investors [화면6]
     # ============================================================
-    def get_top_investors(self, limit: int = 3) -> list[dict]:
+    def get_top_investors(self, limit: int = 4) -> list[dict]:
         return self._execute(f"""
-            WITH type_top AS (
-              SELECT *, ROW_NUMBER() OVER (PARTITION BY investor_type ORDER BY rank ASC) AS rn
-              FROM {self._t('app_top_investor_cache')}
-            )
-            SELECT ROW_NUMBER() OVER (ORDER BY rank ASC) AS rank,
-                   investor_type, investor_emoji,
+            SELECT rank, investor_type, investor_emoji,
                    short_status, tags_json, total_asset_krw,
                    holding_count AS avg_holdings,
                    total_return_pct,
@@ -195,8 +190,7 @@ class DBClient:
                    daily_buys_json, daily_sells_json,
                    recent_trade_date AS daily_pick_date,
                    cached_at AS cache_updated_at
-            FROM type_top
-            WHERE rn = 1
+            FROM {self._t('app_top_investor_cache')}
             ORDER BY rank ASC
             LIMIT {limit}
         """)
@@ -212,3 +206,19 @@ class DBClient:
             WHERE customer_id = '{customer_id}'
             ORDER BY display_rank ASC
         """)
+
+    # ============================================================
+    # Event Detail (뉴스 상세)
+    # ============================================================
+    def get_event_detail(self, event_id: str) -> dict:
+        rows = self._execute(f"""
+            SELECT event_id, event_title, event_type, event_subtype,
+                   related_sector, related_theme, ai_investment_view,
+                   event_summary, news_summary, tags_json,
+                   impacted_assets_json, sentiment_score, importance_score,
+                   published_at
+            FROM {self._t('app_cache_news_feed')}
+            WHERE event_id = '{event_id}'
+            LIMIT 1
+        """)
+        return rows[0] if rows else {}
