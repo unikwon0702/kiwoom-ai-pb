@@ -24,16 +24,91 @@ const GRADIENTS = [["#606CF2","#818CF8"],["#8B5CF6","#A78BFA"],["#06B6D4","#22D3
 
 /* ===== Korean Labels ===== */
 const COL_KR: Record<string, string> = {
-  total_profit_loss:"총손익", evaluation_amount:"평가금액", valuation_amount:"평가금액",
+  // 기본 자산 정보
+  asset_name:"종목명", asset_type:"자산유형", asset_subtype:"세부유형",
+  asset_korean_abbreviation:"종목 약칭", asset_category:"자산구분",
+  sector:"섹터", market:"시장", country_code:"국가",
+  // 금액/수량
+  purchase_amount:"매수금액", buy_amount:"매수금액",
+  valuation_amount:"평가금액", evaluation_amount:"평가금액",
+  current_price:"현재가", latest_close_price:"종가",
+  holding_amount:"보유금액", market_value:"시장가치",
+  holding_current_price:"보유 현재가", average_buy_price:"평균매수가",
+  quantity:"수량", holding_quantity:"보유수량",
+  total_purchase_amount:"총매수금액", total_valuation_amount:"총평가금액",
+  // 수익률/손익
+  total_profit_loss:"총손익", profit_loss:"손익",
+  total_return_rate:"총수익률", return_rate:"수익률", profit_loss_rate:"손익률",
+  valuation_profit_loss_amount:"평가손익금액", valuation_return_rate:"평가수익률",
+  current_return:"현재수익률", total_return_pct:"총수익률(%)",
+  avg_return_rate:"평균수익률", max_return_rate:"최대수익률", min_return_rate:"최소수익률",
+  price_change_rate:"가격변동률",
+  top_asset_return:"상위종목 수익률", top_asset_name:"상위종목",
+  best_return_asset_name:"최고수익 종목", worst_return_asset_name:"최저수익 종목",
+  total_pnl:"총손익금액",
+  // 비중/배분
+  holding_weight:"비중", weight:"비중", max_holding_weight:"최대보유비중",
   stock_ratio:"주식", bond_ratio:"채권", cash_ratio:"현금", etf_ratio:"ETF",
-  risk_score:"위험도", asset_name:"종목명", asset_type:"자산유형",
-  holding_weight:"비중", total_return_rate:"총수익률", profit_loss_rate:"손익률",
-  purchase_amount:"매수금액", current_price:"현재가", return_rate:"수익률",
-  weight:"비중", domestic_ratio:"국내", overseas_ratio:"해외",
-  holding_amount:"보유금액", profit_loss:"손익", buy_amount:"매수금액",
-  asset_category:"자산구분", concentration_score:"집중도", volatility:"변동성",
-  bond_fund_ratio:"채권펀드", market_value:"시장가치", quantity:"수량",
+  fund_ratio:"펀드", derivative_ratio:"파생상품", cash_like_ratio:"현금성",
+  domestic_ratio:"국내", overseas_ratio:"해외", overseas_valuation_ratio:"해외평가비중",
+  stock_weight:"주식비중", bond_weight:"채권비중", fund_weight:"펀드비중",
+  derivative_weight:"파생비중", cash_weight:"현금비중",
+  bond_fund_ratio:"채권펀드",
+  // 리스크/진단 지표
+  risk_score:"위험도", representative_risk_score:"대표 위험점수",
+  product_risk_grade:"상품위험등급", portfolio_risk_level:"포트폴리오 위험등급",
+  overall_diagnosis:"종합진단", concentration_score:"집중도",
+  concentration_level:"집중도 수준", diversification_score:"분산투자 점수",
+  volatility:"변동성", volatility_level:"변동성 수준",
+  stock_volatility:"주식변동성", representative_volatility:"대표변동성",
+  beta:"베타", sharpe_ratio:"샤프비율", fund_sharpe_ratio:"펀드 샤프비율",
+  mdd:"최대하락폭(MDD)", fund_mdd:"펀드 MDD",
+  rsi:"RSI", rsi_signal:"RSI 신호",
+  per:"PER", pbr:"PBR", roe:"ROE",
+  macd:"MACD", momentum_signal:"모멘텀 신호",
+  valuation_signal:"벨류에이션 신호",
+  cagr_1y:"1년 연평균성장률", trend_slope:"추세 기울기",
+  news_sentiment:"뉴스 감성", avg_event_impact_score:"평균 이벤트영향도",
+  max_event_impact_score:"최대 이벤트영향도",
+  // 리밸런싱/전략
+  rebalance_frequency:"리밸런싱 주기", risk_preference_summary:"위험선호 요약",
+  portfolio_comment:"포트폴리오 코멘트", portfolio_theme:"포트폴리오 테마",
+  // 보유 기간/건수
+  holding_period_days:"보유일수", avg_holding_period_days:"평균보유일수",
+  total_holding_count:"총보유종목수", stock_holding_count:"주식 보유수",
+  etf_holding_count:"ETF 보유수", bond_holding_count:"채권 보유수",
+  fund_holding_count:"펀드 보유수", derivative_holding_count:"파생 보유수",
+  overseas_holding_count:"해외 보유수",
+  loss_asset_count:"손실종목수", profit_asset_count:"수익종목수",
+  // 시그널/이벤트
+  total_signal_count:"총시그널수", risk_signal_count:"위험시그널수",
+  signal_category_count:"시그널유형수", risk_signal_names:"위험신호명",
+  has_risk_signal:"위험신호 여부", active_signal_count:"활성 시그널수",
+  recent_event_count:"최근 이벤트수", positive_event_count:"긴정 이벤트",
+  negative_event_count:"부정 이벤트", impacted_event_count:"영향 이벤트수",
+  positive_impact_count:"긴정 영향", negative_impact_count:"부정 영향",
+  neutral_impact_count:"중립 영향", avg_impact_score:"평균 영향도",
+  // 채권/펀드/파생 지표
+  ytm:"만기수익률(YTM)", duration:"듀레이션",
+  modified_duration_value:"수정듀레이션", credit_rating:"신용등급",
+  interest_rate_sensitivity:"금리민감도",
+  period_return_6m:"6개월 수익률", bm_excess_return:"BM초과수익률",
+  fund_flow_trend:"펀드자금흐름",
+  knock_in_barrier:"녹인 배리어", knock_in_distance:"녹인 거리",
+  early_redemption_probability:"조기상환 확률",
+  maturity_remaining_days:"만기잔여일", derivative_total_return:"파생상품 총수익률",
+  // 시장 상황
+  latest_market_state:"시장상태", latest_market_regime:"시장국면",
+  latest_market_comment:"시장코멘트", latest_market_date:"시장일자",
+  // 고객 정보
+  customer_name:"고객명", customer_id:"고객 ID",
+  top_weight_asset_name:"최대비중 종목", top_weight_asset_sector:"최대비중 섹터",
+  investor_risk_profile:"투자자 위험성향",
+  // 기타
+  signal_name:"시그널명", interpretation:"해석", signal_category:"시그널 분류",
+  holding_type:"보유구분", as_of_date:"기준일",
 };
+function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g, " "); }
 function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g, " "); }
 
 /* ===== Formatters ===== */
