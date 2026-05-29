@@ -73,7 +73,10 @@ export const api = {
   getTopInvestors: (limit = 4) =>
     request<{ investors: any[] }>(`/top-investor?limit=${limit}`),
 
-    getCustomerInterests: (customerId: string) =>
+      getEventDetail: (eventId: string) =>
+    request<any>(`/event-detail?event_id=${eventId}`),
+
+  getCustomerInterests: (customerId: string) =>
     request<{ interests: { asset_name: string; asset_type: string; asset_subtype: string; interest_type: string; display_rank: number; already_held_yn: string }[] }>(
       `/customer-interests?customer_id=${customerId}`
     ),
