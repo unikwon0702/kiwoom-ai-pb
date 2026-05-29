@@ -167,7 +167,7 @@ function NotificationsPage() {
 
   const scheduleItems: Schedule[] = (schedulesRaw?.schedules ?? []).map((s: any, i: number) => ({
     dTag: `D-${i + 1}`,
-    date: getDisplayTime(s.published_at, i + 9),
+    date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
     title: s.event_title ?? '',
     desc: s.event_summary ?? '',
   }));
