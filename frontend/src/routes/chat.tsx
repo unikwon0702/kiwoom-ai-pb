@@ -109,7 +109,6 @@ const COL_KR: Record<string, string> = {
   holding_type:"보유구분", as_of_date:"기준일",
 };
 function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g, " "); }
-function toKr(col: string): string { return COL_KR[col] || col.replace(/_/g, " "); }
 
 /* ===== Formatters ===== */
 function fmtVal(val: any): string {
