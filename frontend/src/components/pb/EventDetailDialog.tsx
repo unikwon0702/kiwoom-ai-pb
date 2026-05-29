@@ -137,38 +137,35 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                         </p>
                       )}
 
-                      {/* 미니 임팩트 차트 */}
+                      {/* 섹터별 영향도 */}
                       <div className="rounded-xl bg-card border border-border/60 p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[12.5px] font-semibold text-foreground">시장 영향도</span>
-                          <span className={`text-[16px] font-bold ${sentiment >= 0 ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
-                            {sentiment >= 0 ? "+" : ""}{(sentiment * 100).toFixed(1)}%
-                          </span>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[12.5px] font-semibold text-foreground">섹터별 영향도</span>
+                          <span className="text-[11px] text-muted-foreground">{allAssets.length}개 종목 분석</span>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mb-2">감성 점수 · 중요도 {importance.toFixed(2)}</p>
-                        <div className="flex-1 min-w-0">
-                          <svg viewBox="0 0 200 60" preserveAspectRatio="none" className="w-full h-16">
-                            <g className={sentiment >= 0 ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}>
-                              <path
-                                d={sentiment >= 0
-                                  ? "M0,50 L33,44 L66,38 L99,30 L132,22 L165,14 L200,8"
-                                  : "M0,10 L33,18 L66,26 L99,32 L132,40 L165,46 L200,52"}
-                                fill="none" stroke="currentColor" strokeWidth="2.5"
-                                strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
-                              />
-                              {(sentiment >= 0
-                                ? [[0,50],[33,44],[66,38],[99,30],[132,22],[165,14],[200,8]]
-                                : [[0,10],[33,18],[66,26],[99,32],[132,40],[165,46],[200,52]]
-                              ).map(([x, y]) => (
-                                <circle key={`${x}-${y}`} cx={x} cy={y} r="2.2" fill="currentColor" />
-                              ))}
-                            </g>
-                          </svg>
-                          <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-                            {["D-6", "D-5", "D-4", "D-3", "D-2", "D-1", "오늘"].map((d) => (
-                              <span key={d}>{d}</span>
-                            ))}
-                          </div>
+                        <div className="space-y-2">
+                          {sectorKeys.slice(0, 4).map((sector) => {
+                            const assets = sectorGroups[sector] ?? [];
+                            const avgScore = assets.reduce((sum, a) => sum + (a.impact_score || 0), 0) / assets.length;
+                            const pct = Math.min(Math.round(avgScore * 100), 100);
+                            const isPositive = assets.filter(a => a.impact_direction === "긍정").length >= assets.length / 2;
+                            return (
+                              <div key={sector}>
+                                <div className="flex items-center justify-between mb-0.5">
+                                  <span className="text-[11.5px] font-medium text-foreground">{sector}</span>
+                                  <span className={`text-[11px] font-bold ${isPositive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
+                                    {isPositive ? "+" : "-"}{pct}%
+                                  </span>
+                                </div>
+                                <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${isPositive ? "bg-[color:var(--pos)]" : "bg-[color:var(--neg)]"}`}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

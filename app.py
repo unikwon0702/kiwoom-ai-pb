@@ -95,6 +95,14 @@ def get_top_investor(limit: int = Query(default=4, le=20)):
 
 
 
+
+@app.get("/api/holding-detail")
+def get_holding_detail(customer_id: str = Query(default="CUST0001"), asset_name: str = Query(...)):
+    """종목 상세 팝업 데이터"""
+    data = db.get_holding_detail(customer_id, asset_name)
+    return data
+
+
 @app.get("/api/event-detail")
 def get_event_detail(event_id: str = Query(...)):
     """뉴스/이벤트 상세"""

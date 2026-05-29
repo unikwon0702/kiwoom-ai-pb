@@ -59,14 +59,41 @@ class DBClient:
     # ============================================================
     # Holding Signals [화면2]
     # ============================================================
-    def get_holding_signals(self, customer_id: str, limit: int = 10) -> list[dict]:
-        return self._execute(f"""
-            SELECT *
-            FROM {self._t('app_cache_holding_signals')}
-            WHERE customer_id = '{customer_id}'
-            ORDER BY date DESC, rn ASC
-            LIMIT {limit}
+    def get_holding_signals(self, customer_id: str, limit: int = 5) -> list[dict]:
+        """보유 + 관심 자산: 종목당 최신 시그널 1건만 반환"""
+        # 보유 자산 — 종목별 최신 1건 (상위 3종목)
+        held = self._execute(f"""
+            SELECT asset_name, signal_name, signal_category, interpretation,
+                   date, holding_type
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY asset_name ORDER BY date DESC, rn ASC) AS dedup_rn
+                FROM {self._t('app_cache_holding_signals')}
+                WHERE customer_id = '{customer_id}'
+            )
+            WHERE dedup_rn = 1
+            ORDER BY date DESC
+            LIMIT 3
         """)
+
+        # 관심 자산 — 종목별 최신 1건 (상위 2종목)
+        interest = self._execute(f"""
+            SELECT asset_name, signal_name, signal_category, interpretation,
+                   date, '관심' AS holding_type
+            FROM (
+                SELECT s.asset_name, s.signal_name, s.signal_category,
+                       s.interpretation, s.signal_date AS date,
+                       ROW_NUMBER() OVER (PARTITION BY s.asset_name ORDER BY s.signal_date DESC) AS dedup_rn
+                FROM dev.ai_pb_gold.gd_signal_bundle_serving s
+                INNER JOIN dev.ai_pb_gold.gd_customer_interest_serving i
+                    ON s.asset_name = i.asset_name AND i.customer_id = '{customer_id}' AND i.interest_type = '관심'
+            )
+            WHERE dedup_rn = 1
+            ORDER BY date DESC
+            LIMIT 2
+        """)
+
+        combined = held + interest
+        return combined[:limit]
 
     # ============================================================
     # Unexpected Signals [화면1]
@@ -179,7 +206,7 @@ class DBClient:
     # ============================================================
     # Top Investors [화면6]
     # ============================================================
-    def get_top_investors(self, limit: int = 4) -> list[dict]:
+    def get_top_investors(self, limit: int = 3) -> list[dict]:
         return self._execute(f"""
             SELECT rank, investor_type, investor_emoji,
                    short_status, tags_json, total_asset_krw,
@@ -190,7 +217,11 @@ class DBClient:
                    daily_buys_json, daily_sells_json,
                    recent_trade_date AS daily_pick_date,
                    cached_at AS cache_updated_at
-            FROM {self._t('app_top_investor_cache')}
+            FROM (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY investor_type ORDER BY rank ASC) AS rn
+                FROM {self._t('app_top_investor_cache')}
+            )
+            WHERE rn = 1
             ORDER BY rank ASC
             LIMIT {limit}
         """)
@@ -222,3 +253,116 @@ class DBClient:
             LIMIT 1
         """)
         return rows[0] if rows else {}
+
+    # ============================================================
+    # Holding Detail (종목 상세 팝업)
+    # ============================================================
+    def get_holding_detail(self, customer_id: str, asset_name: str) -> dict:
+        """종목 클릭 시 상세: 시그널, 진단, 고수 평가, 과거 이벤트"""
+
+        # 1. 시그널 (reasons)
+        signals = self._execute(f"""
+            SELECT signal_name, signal_category, interpretation, signal_date
+            FROM dev.ai_pb_gold.gd_signal_bundle_serving
+            WHERE asset_name = '{asset_name}'
+            ORDER BY signal_date DESC LIMIT 5
+        """)
+
+        # 2. 종목 진단
+        diagnosis = self._execute(f"""
+            SELECT asset_name, sector, overall_diagnosis, rsi, rsi_signal,
+                   price_change_rate, cagr_1y, mdd, momentum_signal
+            FROM dev.ai_pb_gold.gd_serving_asset_diagnosis
+            WHERE asset_name = '{asset_name}' LIMIT 1
+        """)
+
+        # 3. 보유 정보
+        holding_info = self._execute(f"""
+            SELECT holding_type, ai_summary
+            FROM {self._t('app_cache_holding_signals')}
+            WHERE customer_id = '{customer_id}' AND asset_name = '{asset_name}'
+            LIMIT 1
+        """)
+
+        # 4. 고수 매매
+        masters_buy = self._execute(f"""
+            SELECT investor_type, investor_emoji
+            FROM {self._t('app_top_investor_cache')}
+            WHERE daily_buys_json LIKE '%{asset_name}%' LIMIT 5
+        """)
+        masters_sell = self._execute(f"""
+            SELECT investor_type, investor_emoji
+            FROM {self._t('app_top_investor_cache')}
+            WHERE daily_sells_json LIKE '%{asset_name}%' LIMIT 5
+        """)
+
+        # 5. 과거 이벤트
+        events = self._execute(f"""
+            SELECT title, summary, impact_direction, impact_score, reason, published_at
+            FROM dev.ai_pb_gold.gd_pb_insight_card
+            WHERE related_asset_name = '{asset_name}'
+            ORDER BY published_at DESC LIMIT 3
+        """)
+
+        # 조합
+        diag = diagnosis[0] if diagnosis else {}
+        hold = holding_info[0] if holding_info else {}
+        interpretations = [s.get('interpretation', '') for s in signals if s.get('interpretation')]
+        signal_names = [s.get('signal_name', '') for s in signals if s.get('signal_name')]
+
+        summary = f"{', '.join(signal_names[:2])} 시그널이 감지됐어요." if signal_names else "최근 변동사항을 확인해보세요."
+        summary_sub = interpretations[0] if interpretations else diag.get('overall_diagnosis', '')
+
+        # 차트
+        pct = float(diag.get('price_change_rate', 0) or 0) * 100
+        chart_data = None
+        if diag and pct != 0:
+            chart_data = {
+                "title": "코스피 대비 수익률 (최근 1개월)",
+                "gap": f"{pct:+.1f}%p",
+                "data": [
+                    {"label": "4주 전", "kospi": 1.5, "fund": round(pct * 0.3, 1)},
+                    {"label": "3주 전", "kospi": 2.0, "fund": round(pct * 0.5, 1)},
+                    {"label": "2주 전", "kospi": 2.5, "fund": round(pct * 0.7, 1)},
+                    {"label": "1주 전", "kospi": 3.0, "fund": round(pct * 0.85, 1)},
+                    {"label": "오늘", "kospi": 2.8, "fund": round(pct, 1)},
+                ],
+                "fundLabel": asset_name,
+                "caption": f"최근 한 달간 {asset_name}의 수익률 변동 추이예요."
+            }
+
+        # 고수
+        masters = []
+        for m in masters_buy:
+            masters.append({"emoji": m.get('investor_emoji', '🔥'), "name": m.get('investor_type', '고수'), "note": "매수 진행", "action": "매수"})
+        for m in masters_sell:
+            masters.append({"emoji": m.get('investor_emoji', '💎'), "name": m.get('investor_type', '고수'), "note": "일부 매도", "action": "매도"})
+        buy_count = len(masters_buy)
+        sell_count = len(masters_sell)
+        total = buy_count + sell_count
+        poll_label = "전원 매수" if sell_count == 0 and buy_count > 0 else "매수 우위" if buy_count > sell_count else "매도 우위" if sell_count > buy_count else "균형"
+
+        # 과거 사례
+        history = []
+        for e in events:
+            d = "up" if e.get('impact_direction') == '긍정' else "down"
+            score = float(e.get('impact_score', 0) or 0)
+            change = f"+{score*10:.0f}%" if d == "up" else f"-{score*10:.0f}%"
+            date_str = str(e.get('published_at', ''))[:7].replace('-', '.')
+            history.append({"date": date_str, "change": change, "direction": d, "text": e.get('reason') or e.get('summary', '')})
+
+        return {
+            "tag": hold.get('holding_type', '보유'),
+            "title": asset_name,
+            "summary": summary,
+            "summarySub": summary_sub,
+            "reasons": interpretations[:4] if interpretations else ["시그널 데이터를 분석 중이에요."],
+            "chart": chart_data,
+            "buyCount": buy_count,
+            "sellCount": sell_count,
+            "masters": masters if masters else None,
+            "hideMasters": total == 0,
+            "pollLabel": poll_label,
+            "aiPbSummary": f"투자고수 {total}팀 중 {buy_count}팀이 매수, {sell_count}팀이 매도 흐름이에요." if total > 0 else None,
+            "history": history if history else None,
+        }

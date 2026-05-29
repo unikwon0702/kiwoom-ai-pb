@@ -73,7 +73,10 @@ export const api = {
   getTopInvestors: (limit = 4) =>
     request<{ investors: any[] }>(`/top-investor?limit=${limit}`),
 
-      getEventDetail: (eventId: string) =>
+        getHoldingDetail: (customerId: string, assetName: string) =>
+    request<any>(`/holding-detail?customer_id=${customerId}&asset_name=${encodeURIComponent(assetName)}`),
+
+  getEventDetail: (eventId: string) =>
     request<any>(`/event-detail?event_id=${eventId}`),
 
   getCustomerInterests: (customerId: string) =>
