@@ -99,6 +99,7 @@ class DBClient:
     # Unexpected Signals [화면1]
     # ============================================================
     def get_unexpected_signals(self, limit: int = 4) -> list[dict]:
+        """의외의 신호: importance 상위 이벤트"""
         return self._execute(f"""
             SELECT event_id, event_title, event_type, event_subtype,
                    related_sector, ai_investment_view,
@@ -114,6 +115,7 @@ class DBClient:
     # Market Events [화면3]
     # ============================================================
     def get_market_events(self, limit: int = 5) -> list[dict]:
+        """이벤트·시황: 시장 전반 (의외의 신호 상위 event_id 제외)"""
         return self._execute(f"""
             SELECT event_id, event_title, event_type, event_subtype,
                    related_sector, related_theme, ai_investment_view,
@@ -122,6 +124,13 @@ class DBClient:
             FROM {self._t('app_cache_news_feed')}
             WHERE ai_investment_view IS NOT NULL
               AND impacted_assets_json IS NOT NULL
+              AND event_id NOT IN (
+                  SELECT event_id FROM {self._t('app_cache_news_feed')}
+                  WHERE event_type NOT IN ('실적발표', '배당')
+                    AND importance_score IS NOT NULL
+                  ORDER BY importance_score DESC, sort_timestamp DESC
+                  LIMIT 4
+              )
             ORDER BY sort_timestamp DESC
             LIMIT {limit}
         """)

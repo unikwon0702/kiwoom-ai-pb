@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { tagClassName } from "./tag-style";
 import { HoldingDetailDialog } from "./HoldingDetailDialog";
-import { EventDetailDialog } from "./EventDetailDialog";
+import { MarketEventDetailDialog } from "./MarketEventDetailDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
 import { api } from "@/lib/api";
@@ -313,7 +313,7 @@ export function CurrentSituation() {
           />
         );
       })()}
-      <EventDetailDialog
+      <MarketEventDetailDialog
         open={!!activeMarketEventId}
         onOpenChange={(o) => { if (!o) setActiveMarketEventId(null); }}
         eventId={activeMarketEventId}
