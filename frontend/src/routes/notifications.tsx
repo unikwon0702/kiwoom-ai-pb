@@ -262,16 +262,14 @@ function NotificationsPage() {
         <HoldingDetailDialog
           open={openSamsung}
           onOpenChange={setOpenSamsung}
-          buyCount={4}
+          buyCount={2}
           sellCount={1}
           pollLabel="매수 우위"
-          aiPbSummary="고수 5명 중 4명이 매수에 무게를 두며 단기 추가 매수 흐름이 우세해요."
+          aiPbSummary="고수 3팀 중 2팀이 매수에 무게를 두며 단기 매수 흐름이 우세해요."
           masters={[
             { emoji: "🔥", name: "공격형 고수", note: "추가 매수 진행 중", action: "매수" },
-            { emoji: "📈", name: "트렌드형 고수", note: "비중 확대", action: "매수" },
             { emoji: "💎", name: "장기형 고수", note: "장기 보유 유지", action: "매수" },
-            { emoji: "🧾", name: "절세 고수", note: "세제 혜택 고려 매수", action: "매수" },
-            { emoji: "🔍", name: "분석형 고수", note: "일부 차익 실현", action: "매도" },
+            { emoji: "🏅", name: "금상 고수", note: "일부 차익 실현", action: "매도" },
           ]}
         />
         <HoldingDetailDialog
@@ -303,7 +301,7 @@ function NotificationsPage() {
           sellCount={1}
           pollLabel="매수 우위"
           aiPbSummary="고수 1명 중 0명이 매수에 무게를 두며 단기 추가 매수 흐름이 우세해요."
-          masters={[{ emoji: "💎", name: "금융상품 고수", note: "일부 환매", action: "매도" }]}
+          masters={[{ emoji: "🏅", name: "금상 고수", note: "일부 환매", action: "매도" }]}
         />
         <MarketEventDialog open={openOil} onOpenChange={setOpenOil} />
       </div>

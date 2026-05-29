@@ -143,9 +143,8 @@ export function HoldingDetailDialog({
   const [showMasters, setShowMasters] = useState(mastersDefaultOpen);
   const defaultMasters: Master[] = [
     { emoji: "🔥", name: "공격형 고수", note: "추가 매수 진행 중", action: "매수" },
-    { emoji: "📈", name: "트렌드형 고수", note: "비중 확대", action: "매수" },
     { emoji: "💎", name: "장기형 고수", note: "장기 보유 유지", action: "매수" },
-    { emoji: "🔍", name: "분석형 고수", note: "일부 차익 실현", action: "매도" },
+    { emoji: "🏅", name: "금상 고수", note: "일부 차익 실현", action: "매도" },
   ];
   const mastersList = masters ?? defaultMasters;
 

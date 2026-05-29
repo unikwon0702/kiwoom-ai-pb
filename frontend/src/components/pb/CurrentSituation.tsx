@@ -235,7 +235,7 @@ export function CurrentSituation() {
         const sharedMasters = [
           { emoji: "🔥", name: "공격형 고수", note: "추가 매수 진행 중", action: "매수" as const },
           { emoji: "💎", name: "장기형 고수", note: "장기 보유 유지", action: "매수" as const },
-          { emoji: "🔍", name: "분석형 고수", note: "일부 차익 실현", action: "매도" as const },
+          { emoji: "🏅", name: "금상 고수", note: "일부 차익 실현", action: "매도" as const },
         ];
         const sharedPoll = {
           buyCount: 2,
@@ -263,8 +263,8 @@ export function CurrentSituation() {
                 aiPbSummary: "투자고수 3팀이 모두 매수로 단기 매수 흐름이 압도적으로 우세해요.",
                 masters: [
                   { emoji: "🔥", name: "공격형 고수", note: "추가 매수 진행 중", action: "매수" as const },
-                  { emoji: "📈", name: "장기형 고수", note: "비중 확대", action: "매수" as const },
-                  { emoji: "🔍", name: "분석형 고수", note: "신규 진입", action: "매수" as const },
+                  { emoji: "💎", name: "장기형 고수", note: "비중 확대", action: "매수" as const },
+                  { emoji: "🏅", name: "금상 고수", note: "신규 진입", action: "매수" as const },
                 ],
               }
             : activeHolding === "kcgi"
@@ -296,7 +296,7 @@ export function CurrentSituation() {
                 pollLabel: "매도 우위",
                 aiPbSummary: "금융상품 고수 1팀이 환매에 무게를 두며 단기 매도 흐름이 우세해요.",
                 masters: [
-                  { emoji: "💎", name: "금융상품 고수", note: "일부 환매", action: "매도" as const },
+                  { emoji: "🏅", name: "금상 고수", note: "일부 환매", action: "매도" as const },
                 ],
               }
             : activeHolding === "kakao"

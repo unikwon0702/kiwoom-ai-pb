@@ -345,7 +345,7 @@ type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 
 export function MasterInsightDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
-  const { data, loading } = useTopInvestors(4);
+  const { data, loading } = useTopInvestors(3);
   const goChat = () => { onOpenChange(false); navigate({ to: "/chat" }); };
 
   const investors = data?.investors ?? [];
@@ -382,16 +382,16 @@ export function MasterInsightDialog({ open, onOpenChange }: Props) {
                     <h3 className="text-[17px] font-extrabold tracking-tight text-foreground">고수들의 특징</h3>
                     <p className="text-[12.5px] text-muted-foreground leading-relaxed">투자고수는 스타일에 따라 3가지 유형으로 나뉘어요</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-2.5">
                     {masters.map((m) => (
-                      <div key={m.name} className="rounded-2xl border border-border/60 bg-card p-3.5 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <span className="size-9 rounded-full flex items-center justify-center text-[16px]" style={{ backgroundColor: `color-mix(in oklab, ${m.accent} 14%, white)` }}>{m.emoji}</span>
-                          <div className="min-w-0"><div className="text-[13px] font-bold text-foreground leading-tight">{m.name}</div></div>
-                        </div>
-                        <p className="text-[11.5px] text-muted-foreground leading-snug">{m.short}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {m.traits.map((t) => (<span key={t} className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-md bg-muted text-foreground/70">{t}</span>))}
+                      <div key={m.name} className="rounded-2xl border border-border/60 bg-card p-4 flex items-start gap-3">
+                        <span className="size-10 shrink-0 rounded-full flex items-center justify-center text-[18px]" style={{ backgroundColor: `color-mix(in oklab, ${m.accent} 14%, white)` }}>{m.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[14px] font-bold text-foreground leading-tight">{m.name}</div>
+                          <p className="mt-1 text-[12px] text-muted-foreground leading-snug">{m.short}</p>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {m.traits.map((t) => (<span key={t} className="text-[10.5px] font-medium px-1.5 py-0.5 rounded-md bg-muted text-foreground/70">{t}</span>))}
+                          </div>
                         </div>
                       </div>
                     ))}
