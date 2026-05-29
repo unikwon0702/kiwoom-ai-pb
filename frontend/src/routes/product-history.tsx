@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ProductHistoryDialog } from "@/components/pb/ProductHistoryDialog";
 import { useHoldingSignals } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
+import { getDisplayTime } from "@/lib/date";
 
 export const Route = createFileRoute("/product-history")({
   component: ProductHistoryPage,
@@ -76,7 +77,7 @@ function ProductHistoryPage() {
       grouped[name].push(h);
     }
 
-    return Object.entries(grouped).map(([name, items]) => {
+    return Object.entries(grouped).map(([name, items], idx) => {
       const sorted = items.sort((a: any, b: any) => 
         (b.date ?? "").localeCompare(a.date ?? "")
       );
@@ -87,7 +88,7 @@ function ProductHistoryPage() {
         days: 7,
         count: items.length,
         latest: latest.signal_name ?? latest.interpretation ?? "",
-        latestTime: latest.date ? new Date(latest.date).toLocaleDateString("ko-KR", { month: "short", day: "numeric" }) : "",
+        latestTime: getDisplayTime(latest.date, idx),
         trend: "up" as const,
       };
     });

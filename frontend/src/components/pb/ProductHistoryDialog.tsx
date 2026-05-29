@@ -5,6 +5,7 @@ import { tagClassName } from "./tag-style";
 import { X, ChevronDown, ChevronUp, CalendarClock, TrendingUp, TrendingDown } from "lucide-react";
 import { AiChatCta } from "./AiChatCta";
 import { useState } from "react";
+import { formatDemoRelativeTime } from "@/lib/date";
 
 type ReturnPoint = { label: string; value: number };
 type TimelineEvent = {
@@ -50,32 +51,32 @@ const RETURNS: Record<"1M" | "3M" | "6M" | "1Y", ReturnPoint[]> = {
 
 const TIMELINE: TimelineEvent[] = [
   {
-    date: "오늘",
+    date: formatDemoRelativeTime(0),
     text: "외국인 투자자들이 많이 사들이고 있어요",
     impact: { dir: "up", value: "+1.8%", note: "외국인 순매수 유입으로 단기 수급 개선" },
   },
   {
-    date: "05.12",
+    date: formatDemoRelativeTime(5),
     text: "순매수가 8일 연속 이어지고 있어요",
     impact: { dir: "up", value: "+0.9%", note: "연속 순매수로 거래대금 상위 종목 진입" },
   },
   {
-    date: "05.08",
+    date: formatDemoRelativeTime(9),
     text: "주가가 최근 최고치를 경신했어요",
     impact: { dir: "up", value: "+2.4%", note: "52주 신고가 경신, 매수세 강화" },
   },
   {
-    date: "05.07",
+    date: formatDemoRelativeTime(12),
     text: "운용성과가 기대만큼 나오지 않았어요",
     impact: { dir: "down", value: "-1.3%", note: "실적 기대치 하회로 단기 차익실현" },
   },
   {
-    date: "04.28",
+    date: formatDemoRelativeTime(14),
     text: "메모리 반도체 가격 반등 신호가 나왔어요",
     impact: { dir: "up", value: "+1.5%", note: "DRAM 현물가 상승, 업황 개선 기대" },
   },
   {
-    date: "04.20",
+    date: formatDemoRelativeTime(15),
     text: "외국계 증권사가 목표주가를 상향 조정했어요",
     impact: { dir: "up", value: "+1.1%", note: "투자의견 상향에 따른 매수세 유입" },
   },

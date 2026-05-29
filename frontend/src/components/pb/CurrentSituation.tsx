@@ -6,6 +6,7 @@ import { HoldingDetailDialog } from "./HoldingDetailDialog";
 import { MarketEventDialog } from "./MarketEventDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
+import { getDisplayTime } from "@/lib/date";
 function SummaryBlock({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-background px-3.5 py-3 mb-1">
@@ -48,17 +49,17 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   const { data: marketsData, loading: mLoading } = useMarketEvents(3);
   const { data: schedulesData, loading: sLoading } = useSchedules(3);
 
-  const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any) => ({
+  const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => ({
     tag: h.signal_category === '관심' ? '관심' : '보유',
     title: h.asset_name ?? '',
-    time: h.date ? new Date(h.date).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' }) : '',
+    time: getDisplayTime(h.date, i),
     desc: h.signal_name ?? '',
     subDesc: h.interpretation ?? '',
   }));
 
-  const markets: Market[] = (marketsData?.events ?? []).map((e: any) => ({
+  const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => ({
     title: e.event_title ?? '',
-    time: e.published_at ? new Date(e.published_at).toLocaleDateString('ko-KR') : '',
+    time: getDisplayTime(e.published_at, i),
     desc: e.ai_investment_view ?? e.related_sector ?? '',
     hashtags: [e.related_sector, e.event_type].filter(Boolean) as string[],
     relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
@@ -66,7 +67,7 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
 
   const schedules: Schedule[] = (schedulesData?.schedules ?? []).map((s: any, i: number) => ({
     dTag: `D-${i + 1}`,
-    date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
+    date: getDisplayTime(s.published_at, i),
     title: s.event_title ?? '',
     desc: s.event_summary ?? s.event_subtype ?? '',
   }));
