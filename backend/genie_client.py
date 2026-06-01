@@ -5,6 +5,7 @@ AI_PB-Simulation_Test_V4(UPDATE) Space에 질문 전송.
 from databricks.sdk import WorkspaceClient
 import time
 import os
+import re
 
 
 class GenieChatClient:
@@ -60,10 +61,11 @@ class GenieChatClient:
         if not customer_id:
             return question
         display_name = customer_name or customer_id
-        # customer_id는 SQL 필터용으로만 제공, 답변에는 고객명만 사용
+        # customer_id를 자연어와 완전 분리 — Genie가 답변에 ID를 반복하지 않도록
         return (
-            f"고객: {display_name}님 (조회조건: customer_id = '{customer_id}')\n\n"
-            f"{question}"
+            f"{display_name}님의 {question}\n\n"
+            f"---\n"
+            f"SQL 필터: customer_id = '{customer_id}' (답변에 customer_id 값을 노출하지 마세요)"
         )
 
     def _poll(self, conv_id, message_id):
@@ -116,6 +118,10 @@ class GenieChatClient:
         if not answer:
             answer = response.get('content', '')
 
+        # customer_id 노출 방지 후처리
+        answer = self._strip_customer_id(answer)
+        suggested_questions = [self._strip_customer_id(q) for q in suggested_questions]
+
         return {
             "status": "success",
             "answer": answer,
@@ -124,6 +130,18 @@ class GenieChatClient:
             "conversation_id": conv_id,
             "suggested_questions": suggested_questions[:3] if suggested_questions else []
         }
+
+    def _strip_customer_id(self, text: str) -> str:
+        """답변/팔로업에서 customer_id(CUST0001~9999) 패턴을 제거합니다."""
+        if not text:
+            return text
+        # "(CUST0010)" or "(customer_id: CUST0010)" 패턴 제거
+        text = re.sub(r'\s*\((?:customer_id:\s*)?CUST\d+\)', '', text)
+        # "CUST0010" 단독 노출 제거 (앞뒤 공백 정리)
+        text = re.sub(r'\bCUST\d+\b', '', text)
+        # 연속 공백 정리
+        text = re.sub(r'  +', ' ', text).strip()
+        return text
 
     def _fetch_statement_result(self, statement_id: str) -> dict | None:
         """SQL Statements API에서 쿼리 결과 데이터를 가져옵니다."""
