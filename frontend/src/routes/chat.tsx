@@ -20,7 +20,7 @@ export const Route = createFileRoute("/chat")({
 type TableData = { columns: string[]; rows: (string | number | null)[][] };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null };
+  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean };
 
 /* ===== Constants ===== */
 const HISTORY_KEY = "aipb_chat_questions";
@@ -157,7 +157,7 @@ function ChatPage() {
     setHasAutoPromptRun(true);
     const finalText = promptText.replace("김기움님", `${customer.name}님`);
     // Show as bot announcement (left white bubble), then call API silently
-    setMessages(p => [...p, { role: "bot", text: finalText }]);
+    setMessages(p => [...p, { role: "bot", text: finalText, isAnnouncement: true }]);
     sendAutoPrompt(finalText);
   }, [autoPromptType, hasAutoPromptRun, customer]);
 
@@ -241,6 +241,8 @@ function ChatPage() {
                 <div key={i} className="flex justify-end">
                   <div className="max-w-[78%] rounded-2xl rounded-br-sm px-4 py-2.5 text-[14px] text-white shadow-sm" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>{m.text}</div>
                 </div>
+              ) : m.role === "bot" && m.isAnnouncement ? (
+                <AnnouncementMessage key={i} text={m.text} />
               ) : <BotMessage key={i} msg={m} customerName={customer.name} />)}
               {loading && <LoadingPulse name={customer.name} />}
               <div ref={endRef} />
@@ -290,6 +292,23 @@ function EmptyState({ name, onSend }: { name: string; onSend: (q: string) => voi
             <span className="text-[13.5px] text-gray-700 font-medium">{s.text}</span>
           </button>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/* ===== Announcement Message (auto-prompt intro) ===== */
+function AnnouncementMessage({ text }: { text: string }) {
+  return (
+    <div className="flex justify-start w-full">
+      <div className="max-w-[85%] rounded-2xl bg-white border border-indigo-100 shadow-sm px-4 py-3.5">
+        <div className="flex items-center gap-2 mb-2">
+          <div className="size-6 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
+            <Zap className="size-3 text-white" />
+          </div>
+          <span className="text-[12.5px] font-bold text-indigo-600">AI PB 진단 시작</span>
+        </div>
+        <p className="text-[13.5px] text-gray-600 leading-[1.6]">{text}</p>
       </div>
     </div>
   );
