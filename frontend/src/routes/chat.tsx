@@ -2,6 +2,8 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
+// @ts-ignore
+import ReactMarkdown from "react-markdown";
 import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer
@@ -433,28 +435,28 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
                 <ReactMarkdown
                   components={{
-                    strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
-                    ul: ({ children }) => <ul className="mt-2 space-y-1.5 list-none pl-0">{children}</ul>,
-                    ol: ({ children }) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{children}</ol>,
-                    li: ({ children }) => (
+                    strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
+                    ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
+                    ol: (props: any) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{props.children}</ol>,
+                    li: (props: any) => (
                       <li className="flex items-start gap-2">
                         <span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" />
-                        <span>{children}</span>
+                        <span>{props.children}</span>
                       </li>
                     ),
-                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                    table: ({ children }) => (
+                    p: (props: any) => <p className="mb-2 last:mb-0">{props.children}</p>,
+                    table: (props: any) => (
                       <div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100">
-                        <table className="w-full text-[12px]">{children}</table>
+                        <table className="w-full text-[12px]">{props.children}</table>
                       </div>
                     ),
-                    thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
-                    th: ({ children }) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{children}</th>,
-                    td: ({ children }) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{children}</td>,
-                    h1: ({ children }) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{children}</h3>,
-                    h2: ({ children }) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{children}</h3>,
-                    h3: ({ children }) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{children}</h4>,
-                    code: ({ children }) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{children}</code>,
+                    thead: (props: any) => <thead className="bg-gray-50">{props.children}</thead>,
+                    th: (props: any) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{props.children}</th>,
+                    td: (props: any) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{props.children}</td>,
+                    h1: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                    h2: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                    h3: (props: any) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{props.children}</h4>,
+                    code: (props: any) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{props.children}</code>,
                   }}
                 >
                   {msg.text}
