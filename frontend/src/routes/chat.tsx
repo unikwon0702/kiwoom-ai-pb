@@ -37,6 +37,24 @@ function stripFollowUpText(text: string): string {
     .trim();
 }
 
+/* Clean up follow-up question: strip customer name prefix + shorten formal endings */
+function cleanFollowUp(q: string, customerName: string): string {
+  // Remove "XX님의 " prefix
+  let cleaned = q.replace(new RegExp(`^${customerName}님의\\s*`, 'i'), '');
+  cleaned = cleaned.replace(/^[A-Za-z\uAC00-\uD7A3]+님의\s*/, '');
+  // Lowercase first char if Korean
+  // Shorten formal endings: "알려주세요" → "알려줘", "보여주세요" → "보여줘", "해주세요" → "해줘"
+  cleaned = cleaned.replace(/알려주세요\.?$/, '알려줘');
+  cleaned = cleaned.replace(/보여주세요\.?$/, '보여줘');
+  cleaned = cleaned.replace(/해주세요\.?$/, '해줘');
+  cleaned = cleaned.replace(/확인해주세요\.?$/, '확인해줘');
+  cleaned = cleaned.replace(/설명해주세요\.?$/, '설명해줘');
+  cleaned = cleaned.replace(/분석해주세요\.?$/, '분석해줘');
+  cleaned = cleaned.replace(/제안해주세요\.?$/, '제안해줘');
+  cleaned = cleaned.replace(/\.\s*$/, '');
+  return cleaned;
+}
+
 /* ===== Korean Labels ===== */
 const COL_KR: Record<string, string> = {
   // 기본 자산 정보
@@ -189,7 +207,7 @@ function ChatPage() {
         if (td.columns && td.rows) tableData = { columns: td.columns, rows: td.rows };
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
-      const followUps: string[] = data.suggested_questions?.slice(0, 3) || [];
+      const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
       setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
@@ -215,7 +233,7 @@ function ChatPage() {
         if (td.columns && td.rows) tableData = { columns: td.columns, rows: td.rows };
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
-      const followUps: string[] = data.suggested_questions?.slice(0, 3) || [];
+      const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
       setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
