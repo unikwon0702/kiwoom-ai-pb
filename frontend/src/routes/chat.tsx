@@ -250,7 +250,7 @@ function ChatPage() {
                 <AnnouncementMessage key={i} text={m.text} />
               ) : <BotMessage key={i} msg={m} customerName={customer.name} />)}
               {loading && <LoadingPulse name={customer.name} />}
-              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !messages[messages.length - 1].isAnnouncement && (
+              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !(messages[messages.length - 1] as any).isAnnouncement && (
                 <FollowUpQuestions
                   questions={(messages[messages.length - 1] as any).followUps || DEFAULT_FOLLOW_UPS}
                   onSelect={sendQuestion}
