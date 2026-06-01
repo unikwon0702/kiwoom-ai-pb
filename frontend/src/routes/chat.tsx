@@ -149,16 +149,41 @@ function ChatPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Auto-prompt: trigger predefined question on first render when autoPromptType param is present
+  // Auto-prompt: show AI announcement + call API without user bubble
   useEffect(() => {
     if (!autoPromptType || hasAutoPromptRun || !customer?.id) return;
     const promptText = AUTO_PROMPTS[autoPromptType];
     if (!promptText) return;
     setHasAutoPromptRun(true);
-    // Replace placeholder name with actual customer name
     const finalText = promptText.replace("김기움님", `${customer.name}님`);
-    sendQuestion(finalText);
+    // Show as bot announcement (left white bubble), then call API silently
+    setMessages(p => [...p, { role: "bot", text: finalText }]);
+    sendAutoPrompt(finalText);
   }, [autoPromptType, hasAutoPromptRun, customer]);
+
+  // Silent API call for auto-prompt (no user bubble added)
+  const sendAutoPrompt = async (text: string) => {
+    if (!customer?.id) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, conversation_id: conversationId }),
+      });
+      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+      const data = await res.json();
+      setConversationId(data.conversation_id);
+      let tableData: TableData | null = null;
+      if (data.table_data) {
+        const td = data.table_data;
+        if (td.columns && td.rows) tableData = { columns: td.columns, rows: td.rows };
+        else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
+      }
+      setMessages(p => [...p, { role: "bot", text: data.answer || "분석 완료", sql: data.sql, tableData }]);
+    } catch (e: any) {
+      setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
+    } finally { setLoading(false); }
+  };
 
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
