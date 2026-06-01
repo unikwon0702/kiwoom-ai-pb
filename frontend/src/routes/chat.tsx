@@ -328,26 +328,17 @@ function AnnouncementMessage({ text }: { text: string }) {
 /* ===== Follow-Up Questions ===== */
 function FollowUpQuestions({ questions, onSelect }: { questions: string[]; onSelect: (q: string) => void }) {
   return (
-    <div className="w-full rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-4 pt-3.5 pb-2.5">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <span className="text-[14px]">🙏</span>
-          <span className="text-[13px] font-bold text-gray-700">참고해 주세요</span>
-        </div>
-        <div className="border-t border-gray-100" />
-      </div>
-      <div className="px-4 pb-4 space-y-2">
-        {questions.map((q) => (
-          <button
-            key={q}
-            onClick={() => onSelect(q)}
-            className="w-full flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-[#F4F6FB] border border-[#E8ECF4] text-left hover:bg-[#EDF0F8] hover:border-indigo-200 transition-all"
-          >
-            <span className="text-[14px] text-indigo-400 mt-px shrink-0">↳</span>
-            <span className="text-[13px] font-medium text-[#1E293B] leading-[1.5]">{q}</span>
-          </button>
-        ))}
-      </div>
+    <div className="w-full space-y-2">
+      {questions.map((q) => (
+        <button
+          key={q}
+          onClick={() => onSelect(q)}
+          className="w-full flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-[#F4F6FB] border border-[#E8ECF4] text-left hover:bg-[#EDF0F8] hover:border-indigo-200 transition-all"
+        >
+          <span className="text-[14px] text-indigo-400 mt-px shrink-0">↳</span>
+          <span className="text-[13px] font-medium text-[#1E293B] leading-[1.5]">{q}</span>
+        </button>
+      ))}
     </div>
   );
 }
