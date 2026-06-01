@@ -20,12 +20,17 @@ export const Route = createFileRoute("/chat")({
 type TableData = { columns: string[]; rows: (string | number | null)[][] };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean };
+  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[] };
 
 /* ===== Constants ===== */
 const HISTORY_KEY = "aipb_chat_questions";
 const COLORS = ["#606CF2", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#6366F1", "#F97316"];
 const GRADIENTS = [["#606CF2","#818CF8"],["#8B5CF6","#A78BFA"],["#06B6D4","#22D3EE"],["#10B981","#34D399"],["#F59E0B","#FBBF24"],["#EF4444","#FB7185"]];
+const DEFAULT_FOLLOW_UPS = [
+  "SK하이닉스 비중 줄이기 어떻게 접근하면 좋을지 알려줘",
+  "ELS1709, ELS1710 만기·조기상환 일정 자세히 알려줘",
+  "반도체 외 섹터 편입 아이디어 더 알려줘",
+];
 
 /* ===== Korean Labels ===== */
 const COL_KR: Record<string, string> = {
@@ -245,6 +250,12 @@ function ChatPage() {
                 <AnnouncementMessage key={i} text={m.text} />
               ) : <BotMessage key={i} msg={m} customerName={customer.name} />)}
               {loading && <LoadingPulse name={customer.name} />}
+              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !messages[messages.length - 1].isAnnouncement && (
+                <FollowUpQuestions
+                  questions={(messages[messages.length - 1] as any).followUps || DEFAULT_FOLLOW_UPS}
+                  onSelect={sendQuestion}
+                />
+              )}
               <div ref={endRef} />
             </div>
           )}
@@ -309,6 +320,33 @@ function AnnouncementMessage({ text }: { text: string }) {
           <span className="text-[12.5px] font-bold text-indigo-600">AI PB 진단 시작</span>
         </div>
         <p className="text-[13.5px] text-gray-600 leading-[1.6]">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Follow-Up Questions ===== */
+function FollowUpQuestions({ questions, onSelect }: { questions: string[]; onSelect: (q: string) => void }) {
+  return (
+    <div className="w-full rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-4 pt-3.5 pb-2.5">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <span className="text-[14px]">🙏</span>
+          <span className="text-[13px] font-bold text-gray-700">참고해 주세요</span>
+        </div>
+        <div className="border-t border-gray-100" />
+      </div>
+      <div className="px-4 pb-4 space-y-2">
+        {questions.map((q) => (
+          <button
+            key={q}
+            onClick={() => onSelect(q)}
+            className="w-full flex items-start gap-2.5 px-3.5 py-3 rounded-xl bg-[#F4F6FB] border border-[#E8ECF4] text-left hover:bg-[#EDF0F8] hover:border-indigo-200 transition-all"
+          >
+            <span className="text-[14px] text-indigo-400 mt-px shrink-0">↳</span>
+            <span className="text-[13px] font-medium text-[#1E293B] leading-[1.5]">{q}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
