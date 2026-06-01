@@ -60,8 +60,11 @@ class GenieChatClient:
         if not customer_id:
             return question
         display_name = customer_name or customer_id
-        # 경량화: "규칙" 지시 제거 → Genie가 Space Instructions를 우선 따르도록
-        return f"{display_name}님(customer_id: {customer_id})의 {question}"
+        # customer_id는 SQL 필터용으로만 제공, 답변에는 고객명만 사용
+        return (
+            f"고객: {display_name}님 (조회조건: customer_id = '{customer_id}')\n\n"
+            f"{question}"
+        )
 
     def _poll(self, conv_id, message_id):
         start = time.time()
