@@ -2,6 +2,8 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
+// @ts-ignore
+import ReactMarkdown from "react-markdown";
 import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer
