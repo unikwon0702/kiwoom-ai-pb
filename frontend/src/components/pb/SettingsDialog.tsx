@@ -340,7 +340,7 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
         {(["group", "importance"] as const).map((m) => (
           <button
             key={m}
-            onClick={() => { setMode(m); saveToStorage(m, enabled); }}
+            onClick={() => setMode(m)}
             className={`text-[13px] font-semibold py-1.5 rounded-md transition-colors ${
               mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
             }`}
