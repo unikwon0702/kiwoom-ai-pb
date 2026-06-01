@@ -60,14 +60,8 @@ class GenieChatClient:
         if not customer_id:
             return question
         display_name = customer_name or customer_id
-        ctx = f"[SELECTED_CUSTOMER_CONTEXT]\ncustomer_id: {customer_id}\n"
-        if customer_name:
-            ctx += f"customer_name: {customer_name}\n"
-        ctx += f"[/SELECTED_CUSTOMER_CONTEXT]\n\n"
-        ctx += f"조회 조건: 반드시 WHERE customer_id = '{customer_id}' 조건을 사용하세요.\n"
-        ctx += f"답변 규칙: 답변에서 고객을 지칭할 때 customer_id(CUST0010 등)를 절대 노출하지 마세요. 반드시 '{display_name}' 또는 '{display_name}님'으로만 표현하세요.\n\n"
-        ctx += f"사용자 질문:\n{question}"
-        return ctx
+        # 경량화: "규칙" 지시 제거 → Genie가 Space Instructions를 우선 따르도록
+        return f"{display_name}님(customer_id: {customer_id})의 {question}"
 
     def _poll(self, conv_id, message_id):
         start = time.time()
@@ -90,7 +84,6 @@ class GenieChatClient:
         table_data = None
         statement_id = None
         suggested_questions = []
-        description = ''
 
         for att in response.get('attachments', []):
             # SQL query + statement_id
@@ -98,9 +91,6 @@ class GenieChatClient:
                 q = att['query']
                 sql = q.get('query', q.get('sql', ''))
                 statement_id = q.get('statement_id')
-                # Extract Genie's interpretation of the question
-                if q.get('description'):
-                    description = q['description']
             # Text answer
             elif 'text' in att:
                 text = att.get('text', {}).get('content', '')
@@ -126,7 +116,6 @@ class GenieChatClient:
         return {
             "status": "success",
             "answer": answer,
-            "description": description,
             "sql": sql,
             "table_data": table_data,
             "conversation_id": conv_id,
