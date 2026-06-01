@@ -90,6 +90,7 @@ class GenieChatClient:
         table_data = None
         statement_id = None
         suggested_questions = []
+        description = ''
 
         for att in response.get('attachments', []):
             # SQL query + statement_id
@@ -97,6 +98,9 @@ class GenieChatClient:
                 q = att['query']
                 sql = q.get('query', q.get('sql', ''))
                 statement_id = q.get('statement_id')
+                # Extract Genie's interpretation of the question
+                if q.get('description'):
+                    description = q['description']
             # Text answer
             elif 'text' in att:
                 text = att.get('text', {}).get('content', '')
@@ -122,6 +126,7 @@ class GenieChatClient:
         return {
             "status": "success",
             "answer": answer,
+            "description": description,
             "sql": sql,
             "table_data": table_data,
             "conversation_id": conv_id,

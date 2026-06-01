@@ -20,7 +20,7 @@ export const Route = createFileRoute("/chat")({
 type TableData = { columns: string[]; rows: (string | number | null)[][] };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[] };
+  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[] };
 
 /* ===== Constants ===== */
 const HISTORY_KEY = "aipb_chat_questions";
@@ -208,7 +208,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -234,7 +234,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -388,13 +388,12 @@ function LoadingPulse({ name }: { name: string }) {
 
 /* ===== Bot Message ===== */
 function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
-  const sections = parseAnswer(msg.text);
   const charts = msg.tableData ? buildCharts(msg.tableData) : [];
 
   return (
     <div className="flex justify-start w-full">
       <div className="w-full space-y-3">
-        {/* Main Summary Card */}
+        {/* Main Answer Card with Markdown */}
         <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 pt-4 pb-3">
             <div className="flex items-center gap-2 mb-3">
@@ -403,8 +402,41 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
               </div>
               <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
             </div>
-            {sections.summary && (
-              <p className="text-[13.5px] text-gray-700 leading-[1.7] whitespace-pre-wrap">{sections.summary}</p>
+            {/* Genie description */}
+            {msg.description && (
+              <p className="text-[12px] text-indigo-500 mb-2 italic">{msg.description}</p>
+            )}
+            {msg.text && (
+              <div className="text-[13.5px] text-gray-700 leading-[1.7]">
+                <ReactMarkdown
+                  components={{
+                    strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
+                    ul: ({ children }) => <ul className="mt-2 space-y-1.5 list-none pl-0">{children}</ul>,
+                    ol: ({ children }) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{children}</ol>,
+                    li: ({ children }) => (
+                      <li className="flex items-start gap-2">
+                        <span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" />
+                        <span>{children}</span>
+                      </li>
+                    ),
+                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100">
+                        <table className="w-full text-[12px]">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
+                    th: ({ children }) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{children}</th>,
+                    td: ({ children }) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{children}</td>,
+                    h1: ({ children }) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{children}</h3>,
+                    h2: ({ children }) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{children}</h3>,
+                    h3: ({ children }) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{children}</h4>,
+                    code: ({ children }) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{children}</code>,
+                  }}
+                >
+                  {msg.text}
+                </ReactMarkdown>
+              </div>
             )}
           </div>
           {/* First chart inside main card */}
@@ -423,26 +455,6 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
               <span className="text-[12px] font-bold text-gray-700">{chart.title}</span>
             </div>
             {chart.type === "donut" ? <InlineDonut data={chart.data} /> : <InlineBar data={chart.data} />}
-          </div>
-        ))}
-
-        {/* Detail sections */}
-        {sections.details.map((sec, i) => (
-          <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2.5">
-              <div className="size-6 rounded-md flex items-center justify-center" style={{ backgroundColor: getSectionStyle(sec.title).bg }}>
-                {getSectionStyle(sec.title).icon}
-              </div>
-              <span className="text-[12.5px] font-bold text-gray-800">{sec.title}</span>
-            </div>
-            <div className="space-y-2">
-              {sec.items.map((item, j) => (
-                <div key={j} className="flex items-start gap-2.5 pl-1">
-                  <span className="size-1.5 rounded-full mt-[7px] shrink-0" style={{ backgroundColor: COLORS[j % COLORS.length] }} />
-                  <span className="text-[13px] text-gray-600 leading-[1.6]">{item}</span>
-                </div>
-              ))}
-            </div>
           </div>
         ))}
 
