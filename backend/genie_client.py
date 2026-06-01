@@ -61,7 +61,7 @@ class GenieChatClient:
         if not customer_id:
             return question
         display_name = customer_name or customer_id
-        # customer_id를 자연어와 완전 분리 — Genie가 답변에 ID를 반복하지 않도록
+        # customer_id를 자연어와 분리 — Genie가 답변에 ID를 반복하지 않도록
         return (
             f"{display_name}님의 {question}\n\n"
             f"---\n"
@@ -118,9 +118,10 @@ class GenieChatClient:
         if not answer:
             answer = response.get('content', '')
 
-        # customer_id 노출 방지 후처리
+        # 후처리: customer_id 노출 방지 + 내부 스키마 필터링
         answer = self._strip_customer_id(answer)
         suggested_questions = [self._strip_customer_id(q) for q in suggested_questions]
+        suggested_questions = [q for q in suggested_questions if not self._has_internal_schema(q)]
 
         return {
             "status": "success",
@@ -132,16 +133,34 @@ class GenieChatClient:
         }
 
     def _strip_customer_id(self, text: str) -> str:
-        """답변/팔로업에서 customer_id(CUST0001~9999) 패턴을 제거합니다."""
+        """답변/팔로업에서 customer_id 패턴을 제거합니다."""
         if not text:
             return text
-        # "(CUST0010)" or "(customer_id: CUST0010)" 패턴 제거
         text = re.sub(r'\s*\((?:customer_id:\s*)?CUST\d+\)', '', text)
-        # "CUST0010" 단독 노출 제거 (앞뒤 공백 정리)
         text = re.sub(r'\bCUST\d+\b', '', text)
-        # 연속 공백 정리
         text = re.sub(r'  +', ' ', text).strip()
         return text
+
+    def _has_internal_schema(self, text: str) -> bool:
+        """텍스트에 내부 테이블명/스키마 정보가 포함되어 있는지 확인합니다."""
+        if not text:
+            return False
+        patterns = [
+            r'\bgd_\w+',           # gd_customer_interest_serving 등
+            r'\bapp_cache_\w+',    # app_cache_holding_signals 등
+            r'\b\w+_serving\b',    # ~_serving 테이블
+            r'\b\w+_context\b',    # ~_context 테이블
+            r'\bdev\.ai_pb_\w+',   # dev.ai_pb_gold.~ 등
+            r'\b\w+_gold\.\w+',    # ~_gold.gd_~ 등
+            r'\bSELECT\b',         # SQL 구문 직접 노출
+            r'\bFROM\s+\w+\.\w+',  # FROM schema.table 패턴
+            r'\b테이블\b',         # "테이블" 단어 직접 노출
+            r'\b칸럼\b',           # "칸럼" 단어 직접 노출
+        ]
+        for p in patterns:
+            if re.search(p, text, re.IGNORECASE):
+                return True
+        return False
 
     def _fetch_statement_result(self, statement_id: str) -> dict | None:
         """SQL Statements API에서 쿼리 결과 데이터를 가져옵니다."""
