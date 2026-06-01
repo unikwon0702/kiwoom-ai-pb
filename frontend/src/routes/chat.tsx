@@ -2,8 +2,6 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
-// @ts-ignore
-import ReactMarkdown from "react-markdown";
 import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer
@@ -39,13 +37,29 @@ function stripFollowUpText(text: string): string {
     .trim();
 }
 
-/* Clean up follow-up question: strip customer name prefix + shorten formal endings */
+/* Clean up follow-up question: strip customer name/id prefix + convert to 반말 */
 function cleanFollowUp(q: string, customerName: string): string {
+  // Remove customer_id patterns: "(CUST0010)", "(customer_id: CUST0010)", standalone "CUST0010"
+  let cleaned = q.replace(/\s*\((?:customer_id:\s*)?CUST\d+\)/g, '');
+  cleaned = cleaned.replace(/\bCUST\d+\b/g, '');
   // Remove "XX님의 " prefix
-  let cleaned = q.replace(new RegExp(`^${customerName}님의\\s*`, 'i'), '');
+  cleaned = cleaned.replace(new RegExp(`^${customerName}님의\\s*`, 'i'), '');
   cleaned = cleaned.replace(/^[A-Za-z\uAC00-\uD7A3]+님의\s*/, '');
-  // Lowercase first char if Korean
-  // Shorten formal endings: "알려주세요" → "알려줘", "보여주세요" → "보여줘", "해주세요" → "해줘"
+  // 존댓말 → 반말 변환 ("~나요?" 계열)
+  cleaned = cleaned.replace(/은 어떻게 되나요\??$/, '을 알려줘');
+  cleaned = cleaned.replace(/는 어떻게 되나요\??$/, '를 알려줘');
+  cleaned = cleaned.replace(/어떻게 되나요\??$/, ' 알려줘');
+  cleaned = cleaned.replace(/어떻게 될까요\??$/, ' 알려줘');
+  cleaned = cleaned.replace(/무엇인가요\??$/, '뭐야?');
+  cleaned = cleaned.replace(/있나요\??$/, '있어?');
+  cleaned = cleaned.replace(/인가요\??$/, '이야?');
+  cleaned = cleaned.replace(/일까요\??$/, '일까?');
+  cleaned = cleaned.replace(/볼까요\??$/, '봐줘');
+  cleaned = cleaned.replace(/할까요\??$/, '해줘');
+  cleaned = cleaned.replace(/드릴까요\??$/, '해줘');
+  cleaned = cleaned.replace(/줄까요\??$/, '줘');
+  cleaned = cleaned.replace(/나요\??$/, '나?');
+  // 존댓말 → 반말 변환 ("~세요" 계열)
   cleaned = cleaned.replace(/알려주세요\.?$/, '알려줘');
   cleaned = cleaned.replace(/보여주세요\.?$/, '보여줘');
   cleaned = cleaned.replace(/해주세요\.?$/, '해줘');
@@ -53,7 +67,14 @@ function cleanFollowUp(q: string, customerName: string): string {
   cleaned = cleaned.replace(/설명해주세요\.?$/, '설명해줘');
   cleaned = cleaned.replace(/분석해주세요\.?$/, '분석해줘');
   cleaned = cleaned.replace(/제안해주세요\.?$/, '제안해줘');
+  cleaned = cleaned.replace(/주세요\.?$/, '줘');
+  // 존댓말 → 반말 변환 (기타)
+  cleaned = cleaned.replace(/합니다\.?$/, '해');
+  cleaned = cleaned.replace(/입니다\.?$/, '이야');
+  cleaned = cleaned.replace(/습니다\.?$/, '어');
   cleaned = cleaned.replace(/\.\s*$/, '');
+  // 연속 공백 정리
+  cleaned = cleaned.replace(/  +/g, ' ').trim();
   return cleaned;
 }
 
