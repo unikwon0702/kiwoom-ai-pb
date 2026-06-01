@@ -160,6 +160,125 @@ class DBClient:
             LIMIT {limit}
         """)
 
+
+    # ============================================================
+    # Schedule Detail (일정 상세 팝업 — 하이브리드: 캐시 or FM)
+    # ============================================================
+    def get_schedule_detail(self, event_id: str) -> dict:
+        """일정 이벤트 상세: ai_investment_view 있으면 캐시, 없으면 FM 생성"""
+        import json as _json
+        from datetime import date as _date
+
+        row = self._execute(f"""
+            SELECT event_id, event_title, event_type, event_subtype,
+                   related_sector, event_summary, ai_investment_view,
+                   scheduled_date, relevance_to_user, importance_score
+            FROM {self._t('app_cache_news_feed')}
+            WHERE event_id = '{event_id}'
+            LIMIT 1
+        """)
+        if not row:
+            return {}
+        event = row[0]
+
+        # D-day 계산
+        d_tag = "D-?"
+        if event.get('scheduled_date'):
+            try:
+                sd = event['scheduled_date']
+                if isinstance(sd, str):
+                    from datetime import datetime
+                    sd = datetime.strptime(sd[:10], '%Y-%m-%d').date()
+                diff = (sd - _date.today()).days
+                d_tag = f"D-{diff}" if diff > 0 else "D-Day" if diff == 0 else f"D+{abs(diff)}"
+            except:
+                pass
+
+        # 캐시 확인 (ai_investment_view가 채워져 있으면)
+        if event.get('ai_investment_view'):
+            # 이미 AI 의견이 있으면 파싱 시도
+            ai_view = event['ai_investment_view']
+            return {
+                "tag": d_tag,
+                "title": event['event_title'],
+                "summaryIcon": "🤖",
+                "summaryLabel": "AI 이벤트 요약",
+                "summary": ai_view,
+                "summarySub": event.get('event_summary', ''),
+                "reasonsIcon": "📣",
+                "reasonsLabel": "무슨 일이 일어날까?",
+                "reasons": [ai_view],
+                "sources": [],
+                "hideMasters": True,
+                "history": None,
+            }
+
+        # FM 호출 (캐시 없을 때)
+        try:
+            ai_response = self._generate_schedule_opinion(event)
+            return {
+                "tag": d_tag,
+                "title": event['event_title'],
+                "summaryIcon": "🤖",
+                "summaryLabel": "AI 이벤트 요약",
+                "summary": ai_response.get('summary', event['event_title']),
+                "summarySub": ai_response.get('summarySub', event.get('event_summary', '')),
+                "reasonsIcon": "📣",
+                "reasonsLabel": "무슨 일이 일어날까?",
+                "reasons": ai_response.get('reasons', [event.get('relevance_to_user', '일정이 다가오고 있어요.')]),
+                "sources": ai_response.get('sources', []),
+                "hideMasters": True,
+                "history": None,
+            }
+        except Exception as e:
+            # FM 실패 시 기본 템플릿
+            return {
+                "tag": d_tag,
+                "title": event['event_title'],
+                "summaryIcon": "🤖",
+                "summaryLabel": "AI 이벤트 요약",
+                "summary": event.get('relevance_to_user', f"{event['event_title']} 일정이 다가오고 있어요."),
+                "summarySub": event.get('event_summary', ''),
+                "reasonsIcon": "📣",
+                "reasonsLabel": "무슨 일이 일어날까?",
+                "reasons": [event.get('relevance_to_user', '해당 일정에 주의가 필요해요.')],
+                "sources": [],
+                "hideMasters": True,
+                "history": None,
+            }
+
+    def _generate_schedule_opinion(self, event: dict) -> dict:
+        """FM 모델로 일정 이벤트 AI 의견 생성"""
+        import json as _json
+        from databricks.sdk import WorkspaceClient
+
+        w = WorkspaceClient()
+        sector = event.get('related_sector', '')
+        prompt = f"""아래 투자 일정 이벤트에 대해 설명해주세요:
+- 이벤트: {event['event_title']}
+- 타입: {event.get('event_type', '')} ({event.get('event_subtype', '')})
+- 관련섹터: {sector}
+- 중요도: {event.get('importance_score', 'medium')}
+
+반드시 아래 JSON 형식으로만 응답하세요:
+{{"summary": "한줄 요약 (25자 이내, 존댓말)", "summarySub": "부연 설명 (40자 이내, 존댓말)", "reasons": ["무슨 일이 일어날 수 있는지 시나리오1 (존댓말)", "시나리오2 (존댓말)"], "sources": ["관련 출처1"]}}"""
+
+        response = w.api_client.do(
+            "POST",
+            "/serving-endpoints/databricks-gpt-5-4-mini/invocations",
+            body={
+                "messages": [
+                    {"role": "system", "content": "당신은 증권사 AI PB입니다. 고객에게 투자 일정을 친절하고 간결하게 설명합니다. 반드시 JSON으로만 응답하세요. 한국어로 답변하세요."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 300,
+                "temperature": 0.3
+            }
+        )
+        ai_text = response["choices"][0]["message"]["content"]
+        clean = ai_text.strip().removeprefix("```json").removesuffix("```").strip()
+        return _json.loads(clean)
+
     # ============================================================
     # Customer Alerts
     # ============================================================

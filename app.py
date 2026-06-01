@@ -57,6 +57,14 @@ def get_market_events(limit: int = Query(default=5, le=20)):
     return {"events": db.get_market_events(limit)}
 
 
+
+@app.get("/api/schedule-detail")
+def get_schedule_detail(event_id: str = Query(...)):
+    """일정 상세 팝업 데이터 (캐시 or FM 생성)"""
+    data = db.get_schedule_detail(event_id)
+    return data
+
+
 @app.get("/api/market-overview")
 def get_market_overview(segment: str = Query(default=None)):
     """[화면3] 시장 현황 브리핑"""

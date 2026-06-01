@@ -223,7 +223,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
 /* ============ 알림설정 패널 ============ */
 
-const CATEGORY_TABS = ["전체", "주식", "펀드", "채권", "파생결합증권"] as const;
+const CATEGORY_TABS = ["주식", "펀드", "채권", "파생결합증권"] as const;
 
 type ToggleRow = { label: string; hasGear?: boolean; gearAction?: "price" };
 
@@ -265,31 +265,42 @@ const IMPORTANCE_SECTIONS: { title: string; rows: ToggleRow[] }[] = [
 
 function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => void }) {
   const [mode, setMode] = useState<"group" | "importance">("group");
-  const [enabled, setEnabled] = useState<Set<string>>(new Set());
+  const [activeCategory, setActiveCategory] = useState<(typeof CATEGORY_TABS)[number]>("주식");
+  const [enabled, setEnabled] = useState<Record<string, Set<string>>>({
+    "주식": new Set(),
+    "펀드": new Set(),
+    "채권": new Set(),
+    "파생결합증권": new Set(),
+  });
 
   // 현재 모드의 모든 라벨 목록
   const currentLabels = (mode === "group" ? GROUP_SECTIONS : IMPORTANCE_SECTIONS)
     .flatMap((s) => s.rows.map((r) => r.label));
 
-  const allOn = currentLabels.length > 0 && currentLabels.every((l) => enabled.has(l));
+  const currentSet = enabled[activeCategory] ?? new Set<string>();
+  const allOn = currentLabels.length > 0 && currentLabels.every((l) => currentSet.has(l));
 
   const toggleAll = (on: boolean) => {
     setEnabled((prev) => {
-      const next = new Set(prev);
+      const next = { ...prev };
+      const catSet = new Set(prev[activeCategory]);
       if (on) {
-        currentLabels.forEach((l) => next.add(l));
+        currentLabels.forEach((l) => catSet.add(l));
       } else {
-        currentLabels.forEach((l) => next.delete(l));
+        currentLabels.forEach((l) => catSet.delete(l));
       }
+      next[activeCategory] = catSet;
       return next;
     });
   };
 
   const toggleOne = (label: string, on: boolean) => {
     setEnabled((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(label);
-      else next.delete(label);
+      const next = { ...prev };
+      const catSet = new Set(prev[activeCategory]);
+      if (on) catSet.add(label);
+      else catSet.delete(label);
+      next[activeCategory] = catSet;
       return next;
     });
   };
@@ -310,7 +321,21 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
         ))}
       </div>
 
-      <CategoryPillTabs />
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1">
+        {CATEGORY_TABS.map((c) => (
+          <button
+            key={c}
+            onClick={() => setActiveCategory(c)}
+            className={`text-[12.5px] font-semibold whitespace-nowrap px-3 py-1.5 rounded-full border transition-colors ${
+              activeCategory === c
+                ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
+                : "bg-card text-foreground/80 border-border/60"
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
 
       <div className="flex items-center justify-end gap-2 px-1">
         <span className="text-[12.5px] text-muted-foreground">전체선택</span>
@@ -328,7 +353,7 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
                 <NotifyRow
                   key={row.label}
                   label={row.label}
-                  checked={enabled.has(row.label)}
+                  checked={currentSet.has(row.label)}
                   onCheckedChange={(on) => toggleOne(row.label, on)}
                   hasGear={row.hasGear}
                   onGearClick={row.gearAction === "price" ? onOpenPriceChange : undefined}
@@ -343,7 +368,7 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
 }
 
 function CategoryPillTabs() {
-  const [active, setActive] = useState<(typeof CATEGORY_TABS)[number]>("전체");
+  const [active, setActive] = useState<(typeof CATEGORY_TABS)[number]>("주식");
   return (
     <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-1">
       {CATEGORY_TABS.map((c) => (

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
@@ -8,6 +8,9 @@ import {
 } from "recharts";
 
 export const Route = createFileRoute("/chat")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    autoPrompt: (search.autoPrompt as string) || undefined,
+  }),
   component: ChatPage,
 });
 
@@ -126,17 +129,34 @@ function loadHistory(): string[] {
 }
 
 /* ===== Main Page ===== */
+const AUTO_PROMPTS: Record<string, string> = {
+  portfolio_diagnosis: "김기움님이 보유한 전체 종목 및 상품을 포트폴리오 관점에서 종합 진단을 해드릴게요.",
+};
+
 function ChatPage() {
   const { customer } = useCustomer();
+  const { autoPrompt } = useSearch({ from: "/chat" });
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>(() => loadHistory());
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [hasAutoPromptRun, setHasAutoPromptRun] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // Auto-prompt: trigger predefined question on first render when autoPrompt param is present
+  useEffect(() => {
+    if (!autoPrompt || hasAutoPromptRun || !customer?.id) return;
+    const promptText = AUTO_PROMPTS[autoPrompt];
+    if (!promptText) return;
+    setHasAutoPromptRun(true);
+    // Replace placeholder name with actual customer name
+    const finalText = promptText.replace("김기움님", `${customer.name}님`);
+    sendQuestion(finalText);
+  }, [autoPrompt, hasAutoPromptRun, customer]);
 
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
