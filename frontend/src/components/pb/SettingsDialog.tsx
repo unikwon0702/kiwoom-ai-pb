@@ -263,15 +263,38 @@ const IMPORTANCE_SECTIONS: { title: string; rows: ToggleRow[] }[] = [
   },
 ];
 
+const STORAGE_KEY = "kiwoom-pb-notifications";
+
+function loadSavedSettings(): { group: Record<string, Set<string>>; importance: Record<string, Set<string>> } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { group: { "주식": new Set(), "펀드": new Set(), "채권": new Set(), "파생결합증권": new Set() }, importance: { "주식": new Set(), "펀드": new Set(), "채권": new Set(), "파생결합증권": new Set() } };
+    const parsed = JSON.parse(raw);
+    const toSets = (obj: Record<string, string[]>) => Object.fromEntries(
+      Object.entries(obj).map(([k, v]) => [k, new Set(v)])
+    );
+    return { group: toSets(parsed.group ?? {}), importance: toSets(parsed.importance ?? {}) };
+  } catch {
+    return { group: { "주식": new Set(), "펀드": new Set(), "채권": new Set(), "파생결합증권": new Set() }, importance: { "주식": new Set(), "펀드": new Set(), "채권": new Set(), "파생결합증권": new Set() } };
+  }
+}
+
+function saveSettings(group: Record<string, Set<string>>, importance: Record<string, Set<string>>) {
+  const toArrays = (obj: Record<string, Set<string>>) => Object.fromEntries(
+    Object.entries(obj).map(([k, v]) => [k, Array.from(v)])
+  );
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ group: toArrays(group), importance: toArrays(importance) }));
+}
+
 function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => void }) {
   const [mode, setMode] = useState<"group" | "importance">("group");
   const [activeCategory, setActiveCategory] = useState<(typeof CATEGORY_TABS)[number]>("주식");
-  const [enabled, setEnabled] = useState<Record<string, Set<string>>>({
-    "주식": new Set(),
-    "펀드": new Set(),
-    "채권": new Set(),
-    "파생결합증권": new Set(),
-  });
+  const [saved] = useState(() => loadSavedSettings());
+  const [groupEnabled, setGroupEnabled] = useState<Record<string, Set<string>>>(saved.group);
+  const [importanceEnabled, setImportanceEnabled] = useState<Record<string, Set<string>>>(saved.importance);
+
+  const enabled = mode === "group" ? groupEnabled : importanceEnabled;
+  const setEnabled = mode === "group" ? setGroupEnabled : setImportanceEnabled;
 
   // 현재 모드의 모든 라벨 목록
   const currentLabels = (mode === "group" ? GROUP_SECTIONS : IMPORTANCE_SECTIONS)
@@ -290,6 +313,9 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
         currentLabels.forEach((l) => catSet.delete(l));
       }
       next[activeCategory] = catSet;
+      // 저장
+      if (mode === "group") saveSettings(next, importanceEnabled);
+      else saveSettings(groupEnabled, next);
       return next;
     });
   };
@@ -301,6 +327,9 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
       if (on) catSet.add(label);
       else catSet.delete(label);
       next[activeCategory] = catSet;
+      // 저장
+      if (mode === "group") saveSettings(next, importanceEnabled);
+      else saveSettings(groupEnabled, next);
       return next;
     });
   };
@@ -311,7 +340,7 @@ function NotificationsPanel({ onOpenPriceChange }: { onOpenPriceChange: () => vo
         {(["group", "importance"] as const).map((m) => (
           <button
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => { setMode(m); saveToStorage(m, enabled); }}
             className={`text-[13px] font-semibold py-1.5 rounded-md transition-colors ${
               mode === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
             }`}

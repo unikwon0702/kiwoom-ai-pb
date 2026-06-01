@@ -139,7 +139,7 @@ export function ProductHistoryDialog({
 
   const goChat = () => {
     onOpenChange(false);
-    navigate({ to: "/chat" });
+    navigate({ to: "/chat", search: {} });
   };
 
   return (

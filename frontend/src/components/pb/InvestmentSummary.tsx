@@ -27,7 +27,7 @@ export function InvestmentSummary() {
         )}
         <Link
           to="/chat"
-          search={{ autoPrompt: 'portfolio_diagnosis' }}
+          search={{ autoPromptType: 'portfolio_diagnosis' }}
           className="absolute bottom-3 right-3 inline-flex items-center gap-0.5 text-[12.5px] font-medium text-[#606CF2] hover:underline"
         >
           자세히 알아보기

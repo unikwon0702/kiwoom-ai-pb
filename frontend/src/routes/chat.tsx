@@ -7,9 +7,11 @@ import {
   Tooltip, ResponsiveContainer
 } from "recharts";
 
+type ChatSearch = { autoPromptType?: string };
+
 export const Route = createFileRoute("/chat")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    autoPrompt: (search.autoPrompt as string) || undefined,
+  validateSearch: (search: Record<string, unknown>): ChatSearch => ({
+    autoPromptType: (search.autoPromptType as string) || undefined,
   }),
   component: ChatPage,
 });
@@ -135,7 +137,7 @@ const AUTO_PROMPTS: Record<string, string> = {
 
 function ChatPage() {
   const { customer } = useCustomer();
-  const { autoPrompt } = useSearch({ from: "/chat" });
+  const { autoPromptType } = useSearch({ from: "/chat" });
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [history, setHistory] = useState<string[]>(() => loadHistory());
@@ -147,16 +149,16 @@ function ChatPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Auto-prompt: trigger predefined question on first render when autoPrompt param is present
+  // Auto-prompt: trigger predefined question on first render when autoPromptType param is present
   useEffect(() => {
-    if (!autoPrompt || hasAutoPromptRun || !customer?.id) return;
-    const promptText = AUTO_PROMPTS[autoPrompt];
+    if (!autoPromptType || hasAutoPromptRun || !customer?.id) return;
+    const promptText = AUTO_PROMPTS[autoPromptType];
     if (!promptText) return;
     setHasAutoPromptRun(true);
     // Replace placeholder name with actual customer name
     const finalText = promptText.replace("김기움님", `${customer.name}님`);
     sendQuestion(finalText);
-  }, [autoPrompt, hasAutoPromptRun, customer]);
+  }, [autoPromptType, hasAutoPromptRun, customer]);
 
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }

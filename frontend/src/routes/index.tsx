@@ -19,7 +19,7 @@ function Index() {
   const navigate = useNavigate();
 
   const goToChat = () => {
-    navigate({ to: "/chat" });
+    navigate({ to: "/chat", search: {} });
   };
 
   return (

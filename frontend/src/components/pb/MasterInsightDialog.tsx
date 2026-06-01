@@ -346,7 +346,7 @@ type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 export function MasterInsightDialog({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const { data, loading } = useTopInvestors(3);
-  const goChat = () => { onOpenChange(false); navigate({ to: "/chat" }); };
+  const goChat = () => { onOpenChange(false); navigate({ to: "/chat", search: {} }); };
 
   const investors = data?.investors ?? [];
   const masters = buildMasters(investors);

@@ -52,7 +52,7 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
       .finally(() => setLoading(false));
   }, [open, eventId]);
 
-  const goChat = () => { onOpenChange(false); navigate({ to: "/chat" }); };
+  const goChat = () => { onOpenChange(false); navigate({ to: "/chat", search: {} }); };
 
   // impacted_assets_json 파싱
   let allAssets: Asset[] = [];
