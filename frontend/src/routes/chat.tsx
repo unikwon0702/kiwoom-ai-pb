@@ -26,11 +26,16 @@ type Msg =
 const HISTORY_KEY = "aipb_chat_questions";
 const COLORS = ["#606CF2", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#6366F1", "#F97316"];
 const GRADIENTS = [["#606CF2","#818CF8"],["#8B5CF6","#A78BFA"],["#06B6D4","#22D3EE"],["#10B981","#34D399"],["#F59E0B","#FBBF24"],["#EF4444","#FB7185"]];
-const DEFAULT_FOLLOW_UPS = [
-  "SK하이닉스 비중 줄이기 어떻게 접근하면 좋을지 알려줘",
-  "ELS1709, ELS1710 만기·조기상환 일정 자세히 알려줘",
-  "반도체 외 섹터 편입 아이디어 더 알려줘",
-];
+/* Strip trailing follow-up / suggested question text from Genie answer */
+function stripFollowUpText(text: string): string {
+  // Remove trailing blocks like "Follow-up:", "추가로 궁금하신 점:", numbered suggestions, etc.
+  return text
+    .replace(/(\n\s*)(Follow-up|follow-up|후속 질문 추천|추가로 궁금하신 점|더 궁금하신 점|참고로)[:\s]*\n(\s*(\d+\.|-|•|\*)\s*.+\n?)+/gi, '')
+    .replace(/(\n\s*)(추가로 궁금하신 점이나[^\n]*)/gi, '')
+    .replace(/(\n\s*)(더 궁금하신 점이 있으시면[^\n]*)/gi, '')
+    .replace(/(\n\s*)(궁금하신 점이 있으시면[^\n]*)/gi, '')
+    .trim();
+}
 
 /* ===== Korean Labels ===== */
 const COL_KR: Record<string, string> = {
@@ -184,7 +189,8 @@ function ChatPage() {
         if (td.columns && td.rows) tableData = { columns: td.columns, rows: td.rows };
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
-      setMessages(p => [...p, { role: "bot", text: data.answer || "분석 완료", sql: data.sql, tableData }]);
+      const followUps: string[] = data.suggested_questions?.slice(0, 3) || [];
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -209,7 +215,8 @@ function ChatPage() {
         if (td.columns && td.rows) tableData = { columns: td.columns, rows: td.rows };
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
-      setMessages(p => [...p, { role: "bot", text: data.answer || "분석 완료", sql: data.sql, tableData }]);
+      const followUps: string[] = data.suggested_questions?.slice(0, 3) || [];
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), sql: data.sql, tableData, followUps }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -250,9 +257,9 @@ function ChatPage() {
                 <AnnouncementMessage key={i} text={m.text} />
               ) : <BotMessage key={i} msg={m} customerName={customer.name} />)}
               {loading && <LoadingPulse name={customer.name} />}
-              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !(messages[messages.length - 1] as any).isAnnouncement && (
+              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !(messages[messages.length - 1] as any).isAnnouncement && ((messages[messages.length - 1] as any).followUps?.length > 0) && (
                 <FollowUpQuestions
-                  questions={(messages[messages.length - 1] as any).followUps || DEFAULT_FOLLOW_UPS}
+                  questions={(messages[messages.length - 1] as any).followUps}
                   onSelect={sendQuestion}
                 />
               )}

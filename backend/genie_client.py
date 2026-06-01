@@ -89,6 +89,7 @@ class GenieChatClient:
         sql = None
         table_data = None
         statement_id = None
+        suggested_questions = []
 
         for att in response.get('attachments', []):
             # SQL query + statement_id
@@ -101,6 +102,10 @@ class GenieChatClient:
                 text = att.get('text', {}).get('content', '')
                 if text:
                     answer = text
+            # Suggested follow-up questions
+            elif 'suggested_questions' in att:
+                sq = att['suggested_questions']
+                suggested_questions = sq.get('questions', [])
 
         # Also check top-level query_result for statement_id
         qr = response.get('query_result', {})
@@ -119,7 +124,8 @@ class GenieChatClient:
             "answer": answer,
             "sql": sql,
             "table_data": table_data,
-            "conversation_id": conv_id
+            "conversation_id": conv_id,
+            "suggested_questions": suggested_questions[:3] if suggested_questions else []
         }
 
     def _fetch_statement_result(self, statement_id: str) -> dict | None:
