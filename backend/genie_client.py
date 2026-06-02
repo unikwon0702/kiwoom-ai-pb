@@ -16,11 +16,11 @@ logger.setLevel(logging.DEBUG)
 SEGMENT_GUIDELINES = {
     "SEG01": {  # 초보 감성
         "label": "초보 감성",
-        "tone": "공감적이고 따뜻한 톤. 비유와 예시를 활용하여 쉽게 설명. '~이에요', '~할 수 있어요' 체를 사용.",
-        "risk_guidance": "리스크를 부드럽게 전달. '마치 ~처럼'이라는 비유를 반드시 1개 이상 사용. 안심할 수 있는 포인트를 먼저 강조.",
-        "recommendation_style": "'안심할 수 있는 점은~'으로 시작하는 문장을 반드시 포함. 왜 이 방향이 좋은지 감성적으로 설명.",
-        "structure": "핵심 요약 → '안심 포인트' 제시 → 비유를 활용한 설명 → 부드러운 다음 행동 제안",
-        "avoid": "전문 용어(MDD, 샤프비율 등), 숫자 테이블, 차가운 경고, 임계값 언급",
+        "tone": "따뜻하고 공감하는 톤. '안심하셔도 돼요', '걱정 안 하셔도 돼요' 같은 안심 표현 사용. '~이에요', '~해요' 체를 사용.",
+        "risk_guidance": "리스크를 부드럽게 전달하되 '다만 ~은 안심하셔도 돼요' 형태로 긍정적 포인트를 함께 제시. 경고보다 안내 톤 유지.",
+        "recommendation_style": "구체적 행동을 부드럽게 제안. '이런 부분은 한번 점검해보시는 것도 좋을 것 같아요' 형태.",
+        "structure": "핵심 요약 → 안심 포인트(긍정적 면) → 주의할 점(부드럽게) → 다음 행동 제안",
+        "avoid": "전문 용어(MDD, 샤프비율 등), 숫자 테이블, 차가운 경고 톤, 임계값, '마치~처럼' 같은 과한 비유",
     },
     "SEG02": {  # 초보 단순
         "label": "초보 단순",
@@ -106,7 +106,7 @@ class GenieChatClient:
         return self._poll(conv_id, mid)
 
     def _inject_context(self, question, customer_id, customer_name, segment=None):
-        """고객 세그먼트 프로필 + 응답 가이드라인을 포함한 컨텍스트 주입. (강화버전)"""
+        """고객 세그먼트 프로필 + 응답 가이드라인을 포함한 컨텍스트 주입."""
         if not customer_id:
             return question
 
@@ -114,26 +114,31 @@ class GenieChatClient:
         guide = SEGMENT_GUIDELINES.get(segment, {})
 
         if not guide:
+            # segment 매핑 실패 시 기본 동작 (기존과 유사)
             logger.warning(f"[GENIE] Unknown segment '{segment}' for {customer_id}. Falling back to basic context.")
             return (
-                f"{display_name}님(customer_id: {customer_id})의 {question}\n\n"
+                f"{display_name}님의 {question}\n\n"
                 f"---\n"
                 f"SQL 필터: customer_id = '{customer_id}' (답변에 customer_id 값을 노출하지 마세요)"
             )
 
-        # 강화된 프롬프트: 질문 먼저, 가이드라인을 강제 지시로 배치
+        # 세그먼트별 풍부한 컨텍스트 구성
         context = (
-            f"{display_name}님(customer_id: {customer_id})의 {question}\n\n"
-            f"─── 아래 응답 규칙을 반드시 따르세요 ───\n"
-            f"이 고객은 [{guide['label']}] 세그먼트입니다.\n"
-            f"▶ 톤: {guide['tone']}\n"
-            f"▶ 리스크 전달: {guide['risk_guidance']}\n"
-            f"▶ 추천 방식: {guide['recommendation_style']}\n"
-            f"▶ 답변 구조: {guide['structure']}\n"
-            f"▶ 절대 금지: {guide['avoid']}\n"
-            f"▶ customer_id를 답변에 노출하지 마세요. '{display_name}님'으로만 지칭.\n"
-            f"▶ 내부 테이블명, 스키마명을 노출하지 마세요.\n"
-            f"─── 위 규칙을 무시하면 안 됩니다 ───"
+            f"[고객 프로필]\n"
+            f"- 고객명: {display_name}\n"
+            f"- 세그먼트: {guide['label']} ({segment})\n"
+            f"- SQL 필터 조건: customer_id = '{customer_id}'\n\n"
+            f"[응답 가이드라인 — 이 고객 세그먼트에 맞게 반드시 적용]\n"
+            f"- 톤앤매너: {guide['tone']}\n"
+            f"- 리스크 전달 방식: {guide['risk_guidance']}\n"
+            f"- 추천/제안 방식: {guide['recommendation_style']}\n"
+            f"- 답변 구조: {guide['structure']}\n"
+            f"- 금지사항: {guide['avoid']}\n\n"
+            f"[규칙]\n"
+            f"- 답변에 customer_id 값(CUST0010 등)을 절대 노출하지 마세요.\n"
+            f"- '{display_name}님'으로만 지칭하세요.\n"
+            f"- 내부 테이블명, 스키마명을 노출하지 마세요.\n\n"
+            f"사용자 질문: {question}"
         )
         return context
 
