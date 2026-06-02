@@ -50,17 +50,21 @@ def build_structured_response(
         if intent == "fallback":
             return None
 
+        # Intent별 응답 전략 결정
+        is_lookup_intent = intent in ("portfolio_allocation_summary",)
+
         # 2. Genie table_data에서 sections 생성
         sections = _build_sections_from_genie(intent, genie_result.get("table_data"))
 
-        # 3. 보강 데이터 조회 (timeout 내에서)
-        elapsed = time.time() - start
-        remaining = MAX_OVERHEAD_SEC - elapsed
-        if remaining > 0.3:  # 최소 0.3초 여유가 있을 때만 조회
-            extra = fetch_supplemental(intent, customer_id, db)
-            if extra:
-                extra_sections = _build_sections_from_cache(intent, extra)
-                sections.extend(extra_sections)
+        # 3. 보강 데이터 조회 (timeout 내에서) — 조회형은 보강 안 함
+        if not is_lookup_intent:
+            elapsed = time.time() - start
+            remaining = MAX_OVERHEAD_SEC - elapsed
+            if remaining > 0.3:
+                extra = fetch_supplemental(intent, customer_id, db)
+                if extra:
+                    extra_sections = _build_sections_from_cache(intent, extra)
+                    sections.extend(extra_sections)
 
         # 4. 빈 sections 이면 fallback
         if not sections:
@@ -77,14 +81,15 @@ def build_structured_response(
             },
             "answer_meta": {
                 "as_of_date": str(date.today()),
-                "data_quality": "sufficient" if len(sections) >= 3 else "partial",
+                "data_quality": "sufficient" if len(sections) >= 2 else "partial",
             },
             "headline": _build_headline(intent, customer_name, segment),
             "summary": genie_result.get("answer", ""),  # Genie 원문 그대로
             "overall_status": _infer_status(intent, sections),
             "sections": sections,
-            "recommended_actions": _extract_actions(sections),
-            "disclaimer": _get_disclaimer(segment),
+            # 조회형 intent는 액션 아이템 생성 안 함
+            "recommended_actions": [] if is_lookup_intent else _extract_actions(sections),
+            "disclaimer": _get_disclaimer(segment) if not is_lookup_intent else "",
         }
 
         elapsed = time.time() - start
@@ -360,7 +365,13 @@ def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
     for row in rows[:8]:
         display_rows.append([_format_value(row[i]) for i in display_cols])
 
-    title = "보유 종목 현황" if intent == "portfolio_diagnosis" else "데이터 요약"
+    title_map = {
+        "portfolio_allocation_summary": "자산 유형별 현황",
+        "portfolio_diagnosis": "보유 종목 현황",
+        "holding_risk_check": "종목별 위험도",
+        "risk_alert": "위험 신호 목록",
+    }
+    title = title_map.get(intent, "데이터 요약")
     sections.append({
         "section_type": "metrics_table",
         "title": title,
@@ -454,7 +465,10 @@ def _build_headline(intent: str, customer_name: str | None, segment: str | None)
     """intent + 세그먼트별 headline 생성."""
     name = customer_name or ""
     titles = {
+        "portfolio_allocation_summary": "자산 구성 현황",
         "portfolio_diagnosis": "포트폴리오 종합 진단",
+        "rebalancing_recommendation": "리밸런싱 추천",
+        "holding_risk_check": "보유 종목 위험도 점검",
         "risk_alert": "위험 신호 점검",
     }
     base = titles.get(intent, "AI PB 분석")
