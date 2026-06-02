@@ -53,8 +53,15 @@ def build_structured_response(
         # Intent별 응답 전략 결정
         is_lookup_intent = intent in ("portfolio_allocation_summary",)
 
-        # 2. Genie table_data에서 sections 생성
-        sections = _build_sections_from_genie(intent, genie_result.get("table_data"))
+        # 2. Genie table_data에서 sections 생성 + row_dict 추출 (상태 판정용)
+        table_data = genie_result.get("table_data")
+        row_dict = None
+        if table_data:
+            columns = table_data.get("columns", [])
+            rows = table_data.get("rows", [])
+            if rows and len(rows) == 1:
+                row_dict = {columns[i]: rows[0][i] for i in range(len(columns))}
+        sections = _build_sections_from_genie(intent, table_data)
 
         # 3. 보강 데이터 조회 (timeout 내에서) — 조회형은 보강 안 함
         if not is_lookup_intent:
@@ -222,16 +229,18 @@ HIDDEN_COLUMNS = {"customer_id", "account_id", "holding_id", "asset_id", "scenar
 # Intent별 핵심 지표 필드 정의 (표시명, 등급 배지)
 PORTFOLIO_KEY_METRICS = [
     # (column_name, display_label, badge_fn)
-    ("total_valuation_amount", "총 평가금액", None),
-    ("valuation_amount", "총 평가금액", None),
-    ("total_return_rate", "전체 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
-    ("avg_return_rate", "평균 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
-    ("avg_return", "평균 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
-    ("portfolio_risk_level", "포트폴리오 위험등급", lambda v: "🟠" if v and "높" in str(v) else "🟢"),
-    ("risk_signal_count", "리스크 신호", lambda v: "⚠️" if v and int(v) > 5 else ""),
-    ("total_holding_count", "보유 종목 수", None),
-    ("diversification_score", "분산 점수", None),
-    ("concentration_level", "집중도", lambda v: "🟠" if v and "높" in str(v) else ""),
+    # badge_fn은 아이콘+텍스트 라벨을 반환
+    ("total_valuation_amount", "총 평가금액", lambda v: ""),
+    ("valuation_amount", "총 평가금액", lambda v: ""),
+    ("total_return_rate", "전체 수익률", lambda v: "🟢 수익" if v and float(v) > 0 else "🔴 손실"),
+    ("avg_return_rate", "평균 수익률", lambda v: "🟢 수익" if v and float(v) > 0 else "🔴 손실"),
+    ("avg_return", "평균 수익률", lambda v: "🟢 수익" if v and float(v) > 0 else "🔴 손실"),
+    ("portfolio_risk_level", "포트폴리오 위험등급", lambda v: "🔴 위험" if v and "높" in str(v) else ("🟠 주의" if v and "중" in str(v) else "🟢 정상")),
+    ("risk_signal_count", "리스크 신호", lambda v: "🔴 위험" if v and int(float(v)) >= 10 else ("🟠 주의" if v and int(float(v)) >= 4 else "🟢 정상")),
+    ("total_holding_count", "보유 종목 수", lambda v: ""),
+    ("diversification_score", "분산 점수", lambda v: "🔴 위험" if v and float(v) <= 1.5 else ("🟠 주의" if v and float(v) <= 3.0 else "🟢 양호")),
+    ("concentration_level", "집중도", lambda v: "🔴 위험" if v and "높" in str(v) else ("🟠 주의" if v and "중" in str(v) else "🟢 낮음")),
+    ("loss_asset_count", "손실 종목 수", lambda v: "🔴 위험" if v and int(float(v)) >= 4 else ("🟠 주의" if v and int(float(v)) >= 2 else "")),
 ]
 
 # 도넛 차트용 비율 필드
@@ -280,8 +289,11 @@ def _build_single_row_sections(intent: str, row_dict: dict) -> list:
             continue
         val = row_dict.get(col_name)
         if val is not None and val != "" and str(val).lower() != "none":
-            formatted = _format_value(val)
-            badge = badge_fn(val) if badge_fn else ""
+            formatted = _format_value(val, col_name)
+            try:
+                badge = badge_fn(val) if badge_fn else ""
+            except (ValueError, TypeError):
+                badge = ""
             metrics_rows.append([label, formatted, badge])
             seen_labels.add(label)
         if len(metrics_rows) >= 6:
@@ -448,17 +460,75 @@ def _build_sections_from_cache(intent: str, extra: dict) -> list:
 # 보조 함수
 # ============================================================
 
-def _format_value(v) -> str:
-    """None, 숫자 등을 표시 가능한 문자열로 변환."""
+def _format_value(v, col_name: str = "") -> str:
+    """
+    None, 숫자 등을 사용자 친화적 문자열로 변환.
+    과학적 표기법, raw 소수값 등을 적절히 포맷팅.
+    """
     if v is None:
         return "-"
-    if isinstance(v, float):
-        if abs(v) >= 1_000_000:
-            return f"{v/100_000_000:.1f}억원"
-        if abs(v) < 1:
-            return f"{v*100:.1f}%"
-        return f"{v:,.0f}"
-    return str(v)
+
+    # 문자열을 숫자로 변환 시도
+    num_val = None
+    if isinstance(v, (int, float)):
+        num_val = float(v)
+    elif isinstance(v, str):
+        # 과학적 표기법 (3.89E8) 처리
+        try:
+            num_val = float(v)
+        except (ValueError, TypeError):
+            pass
+
+    if num_val is None:
+        # 순수 문자열 (높음, 낮음 등)
+        return str(v)
+
+    # 컨럼명 기반 포맷 결정
+    col_lower = col_name.lower() if col_name else ""
+
+    # 건수 필드 우선 (count 키워드가 있으면 금액보다 우선)
+    if "count" in col_lower:
+        return f"{int(num_val)}개"
+
+    # 금액 필드 (amount, valuation, profit, loss, price)
+    if any(kw in col_lower for kw in ["amount", "valuation_amount", "profit", "loss", "price", "total_profit", "total_loss"]):
+        if abs(num_val) >= 100_000_000:  # 1억 이상
+            return f"{num_val/100_000_000:.1f}억원"
+        elif abs(num_val) >= 10_000:  # 1만 이상
+            return f"{num_val/10_000:.0f}만원"
+        else:
+            return f"{num_val:,.0f}원"
+
+    # 비율/수익률 필드 (ratio, rate, return, weight, score는 제외)
+    if any(kw in col_lower for kw in ["ratio", "rate", "return", "weight"]):
+        if abs(num_val) <= 1.0:
+            return f"{num_val * 100:.1f}%"
+        else:
+            return f"{num_val:.1f}%"
+
+    # 건수 필드 (count)
+    if "count" in col_lower:
+        return f"{int(num_val)}개"
+
+    # 신호 수 (signal)
+    if "signal" in col_lower and num_val == int(num_val):
+        return f"{int(num_val)}건"
+
+    # 점수 필드 (score)
+    if "score" in col_lower:
+        return f"{num_val:.1f}"
+
+    # 기본: 큰 숫자는 금액, 작은 숫자는 비율로 추정
+    if abs(num_val) >= 100_000_000:
+        return f"{num_val/100_000_000:.1f}억원"
+    elif abs(num_val) >= 1_000_000:
+        return f"{num_val/10_000:.0f}만원"
+    elif abs(num_val) < 1 and abs(num_val) > 0:
+        return f"{num_val * 100:.1f}%"
+    elif num_val == int(num_val) and abs(num_val) < 1000:
+        return f"{int(num_val)}"
+    else:
+        return f"{num_val:,.0f}"
 
 
 def _build_headline(intent: str, customer_name: str | None, segment: str | None) -> str:
@@ -484,12 +554,74 @@ def _build_headline(intent: str, customer_name: str | None, segment: str | None)
     return f"{name}님 {base}"
 
 
-def _infer_status(intent: str, sections: list) -> dict:
-    """데이터에서 overall_status 추론."""
-    # alert_list가 있으면 warning, 없으면 normal
+def _infer_status(intent: str, sections: list, row_dict: dict | None = None) -> dict:
+    """
+    overall_status 판정. 실제 데이터 값 기반.
+    
+    판정 기준:
+      - 위험: 리스크 신호 10건+, 또는 위험등급 '높음'
+      - 주의: 리스크 신호 4~9건, 또는 위험등급 '중간'
+      - 정상: 리스크 신호 0~3건, 위험등급 '낮음'
+    """
+    # 조회형 intent는 항상 info
+    if intent == "portfolio_allocation_summary":
+        return {"level": "info", "label": "조회", "reason": ""}
+
+    # 실제 데이터 기반 판정
+    if row_dict:
+        risk_level = str(row_dict.get("portfolio_risk_level", ""))
+
+        # 리스크 신호 수
+        signal_count = 0
+        for key in ["risk_signal_count", "signal_count"]:
+            val = row_dict.get(key)
+            if val is not None:
+                try:
+                    signal_count = int(float(val))
+                    break
+                except (ValueError, TypeError):
+                    pass
+
+        # 손실 종목 수
+        loss_count = 0
+        val = row_dict.get("loss_asset_count")
+        if val is not None:
+            try:
+                loss_count = int(float(val))
+            except (ValueError, TypeError):
+                pass
+
+        # 집중도
+        concentration = str(row_dict.get("concentration_level", ""))
+
+        # 판정 로직
+        reasons = []
+
+        # 위험 (danger)
+        if "높" in risk_level or signal_count >= 10:
+            if signal_count >= 10:
+                reasons.append(f"리스크 신호 {signal_count}건")
+            if "높" in risk_level:
+                reasons.append("위험등급 높음")
+            if "높" in concentration:
+                reasons.append("집중도 높음")
+            if loss_count >= 3:
+                reasons.append(f"손실 종목 {loss_count}개")
+            return {"level": "warning", "label": "위험", "reason": ", ".join(reasons) if reasons else "위험 수준 높음"}
+
+        # 주의 (caution)
+        if "중" in risk_level or 4 <= signal_count <= 9 or loss_count >= 2:
+            if signal_count >= 4:
+                reasons.append(f"리스크 신호 {signal_count}건")
+            if loss_count >= 2:
+                reasons.append(f"손실 종목 {loss_count}개")
+            return {"level": "caution", "label": "주의", "reason": ", ".join(reasons) if reasons else "점검 필요"}
+
+    # Fallback: alert_list 존재 여부
     has_alerts = any(s.get("section_type") == "alert_list" for s in sections)
     if has_alerts:
         return {"level": "caution", "label": "주의", "reason": "리스크 신호 감지"}
+
     return {"level": "normal", "label": "정상", "reason": ""}
 
 
