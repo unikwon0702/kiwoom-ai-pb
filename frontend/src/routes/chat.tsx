@@ -256,7 +256,7 @@ function ChatPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, conversation_id: conversationId }),
+        body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
       });
       if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
       const data = await res.json();
