@@ -11,6 +11,7 @@ import os
 
 from backend.db_client import DBClient
 from backend.genie_client import GenieChatClient
+from backend.response_builder import build_structured_response
 
 app = FastAPI(title="AI PB App", docs_url="/docs")
 

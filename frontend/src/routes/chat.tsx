@@ -22,9 +22,20 @@ export const Route = createFileRoute("/chat")({
 
 /* ===== Types ===== */
 type TableData = { columns: string[]; rows: (string | number | null)[][] };
+type StructuredSection = { section_type: string; title: string; icon: string; content: any };
+type StructuredResponse = {
+  intent: string;
+  intent_confidence: number;
+  headline: string;
+  summary: string;
+  overall_status: { level: string; label: string; reason: string };
+  sections: StructuredSection[];
+  recommended_actions: { priority: number; action: string; reason: string; urgency: string }[];
+  disclaimer: string;
+};
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[] };
+  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse };
 
 /* ===== Constants ===== */
 const HISTORY_KEY = "aipb_chat_questions";
@@ -270,7 +281,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -422,8 +433,138 @@ function LoadingPulse({ name }: { name: string }) {
   );
 }
 
+/* ===== Structured Response Components ===== */
+const STATUS_COLORS: Record<string, string> = { good: "#10B981", normal: "#3B82F6", caution: "#F59E0B", warning: "#F97316", critical: "#EF4444", info: "#6B7280" };
+const STATUS_ICONS: Record<string, string> = { good: "✅", normal: "🟢", caution: "🟡", warning: "🟠", critical: "🔴", info: "ℹ️" };
+
+function StructuredCard({ data, customerName }: { data: StructuredResponse; customerName: string }) {
+  return (
+    <div className="flex justify-start w-full">
+      <div className="w-full space-y-3">
+        {/* Header + Status */}
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-3">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="size-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
+                <Activity className="size-3.5 text-white" />
+              </div>
+              <span className="text-[13px] font-bold text-gray-800">{data.headline}</span>
+            </div>
+            {/* Status Badge */}
+            {data.overall_status?.level && data.overall_status.level !== "info" && (
+              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium mb-2" style={{ background: `${STATUS_COLORS[data.overall_status.level] || '#6B7280'}15`, color: STATUS_COLORS[data.overall_status.level] || '#6B7280' }}>
+                <span>{STATUS_ICONS[data.overall_status.level] || ''}</span>
+                <span>{data.overall_status.label}</span>
+                {data.overall_status.reason && <span className="text-gray-500 ml-1">— {data.overall_status.reason}</span>}
+              </div>
+            )}
+            {/* Summary */}
+            {data.summary && (
+              <div className="text-[13.5px] text-gray-700 leading-[1.7] mt-2">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{data.summary}</ReactMarkdown>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Sections */}
+        {data.sections.map((sec, i) => (
+          <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[14px]">{sec.icon}</span>
+                <span className="text-[12px] font-bold text-gray-700">{sec.title}</span>
+              </div>
+              {sec.section_type === "metrics_table" && <SectionMetricsTable content={sec.content} />}
+              {sec.section_type === "alert_list" && <SectionAlertList content={sec.content} />}
+              {sec.section_type === "text_insight" && <SectionTextInsight content={sec.content} />}
+              {sec.section_type === "action_list" && <SectionActionList content={sec.content} />}
+            </div>
+          </div>
+        ))}
+        {/* Recommended Actions */}
+        {data.recommended_actions?.length > 0 && (
+          <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[14px]">💡</span>
+                <span className="text-[12px] font-bold text-gray-700">다음 액션 제안</span>
+              </div>
+              <SectionActionList content={{ items: data.recommended_actions.map(a => ({ action: a.action, reason: a.reason, urgency: a.urgency })) }} />
+            </div>
+          </div>
+        )}
+        {/* Disclaimer */}
+        {data.disclaimer && <p className="text-[11px] text-gray-400 px-1">{data.disclaimer}</p>}
+      </div>
+    </div>
+  );
+}
+
+function SectionMetricsTable({ content }: { content: any }) {
+  const { headers, rows } = content || {};
+  if (!headers || !rows?.length) return null;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-100">
+      <table className="w-full text-[12px]">
+        <thead className="bg-gray-50"><tr>{headers.map((h: string, i: number) => <th key={i} className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{h}</th>)}</tr></thead>
+        <tbody>{rows.map((row: string[], ri: number) => <tr key={ri}>{row.map((cell, ci) => <td key={ci} className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{cell}</td>)}</tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function SectionAlertList({ content }: { content: any }) {
+  const { items } = content || {};
+  if (!items?.length) return null;
+  const levelColor: Record<string, string> = { critical: "#EF4444", warning: "#F97316", caution: "#F59E0B" };
+  return (
+    <div className="space-y-2">
+      {items.map((item: any, i: number) => (
+        <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-gray-50">
+          <span className="size-2 rounded-full mt-1.5 shrink-0" style={{ background: levelColor[item.level] || "#6B7280" }} />
+          <div>
+            <p className="text-[12px] font-medium text-gray-800">{item.title}</p>
+            {item.detail && <p className="text-[11px] text-gray-500">{item.detail}</p>}
+            {item.date && <p className="text-[10px] text-gray-400 mt-0.5">{item.date}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionTextInsight({ content }: { content: any }) {
+  if (!content?.text) return null;
+  return <p className="text-[13px] text-gray-700 leading-[1.7]">{content.text}</p>;
+}
+
+function SectionActionList({ content }: { content: any }) {
+  const { items } = content || {};
+  if (!items?.length) return null;
+  const urgencyColor: Record<string, string> = { high: "#EF4444", medium: "#F59E0B", low: "#10B981" };
+  const urgencyLabel: Record<string, string> = { high: "높음", medium: "중간", low: "낮음" };
+  return (
+    <div className="space-y-2">
+      {items.map((item: any, i: number) => (
+        <div key={i} className="p-2 rounded-lg bg-gray-50">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-gray-800">❶{String.fromCharCode(9311 + i + 1)} {item.action}</span>
+            {item.urgency && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ background: `${urgencyColor[item.urgency] || '#6B7280'}15`, color: urgencyColor[item.urgency] || '#6B7280' }}>{urgencyLabel[item.urgency] || item.urgency}</span>}
+          </div>
+          {item.reason && <p className="text-[11px] text-gray-500 mt-1">{item.reason}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ===== Bot Message ===== */
 function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
+  // 구조화 응답이 있으면 카드 UI로 렌더링
+  if (msg.structured && msg.structured.intent !== "fallback") {
+    return <StructuredCard data={msg.structured} customerName={customerName} />;
+  }
+
   const charts = msg.tableData ? buildCharts(msg.tableData) : [];
 
   return (
@@ -445,7 +586,6 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
             {msg.text && (
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
                   components={{
                     strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
                     ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
