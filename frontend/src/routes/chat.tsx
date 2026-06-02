@@ -202,6 +202,14 @@ function ChatPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // 고객 변경 시 대화 초기화 (세그먼트별 응답 차별화를 위해 필수)
+  useEffect(() => {
+    setConversationId(undefined);
+    setMessages([]);
+    setHasAutoPromptRun(false);
+    console.log(`[AI_PB_DEBUG] Customer changed: ${customer.id} (${customer.segmentCode}) — conversation reset`);
+  }, [customer.id]);
+
   // Auto-prompt: show AI announcement + call API without user bubble
   useEffect(() => {
     if (!autoPromptType || hasAutoPromptRun || !customer?.id) return;
