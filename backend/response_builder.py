@@ -187,6 +187,23 @@ COLUMN_DISPLAY_NAMES = {
     "published_at": "발행일",
     "segment_2x2_code": "세그먼트 코드",
     "segment_name": "세그먼트명",
+    # 추가 매핑 (수익률/지표 관련)
+    "total_return_rate": "총 수익률",
+    "avg_return_rate": "평균 수익률",
+    "max_return_rate": "최대 수익률",
+    "min_return_rate": "최소 수익률",
+    "total_valuation_amount": "총 평가금액",
+    "total_investment_amount": "총 투자금액",
+    "total_profit_loss": "총 손익",
+    "profit_asset_count": "수익 종목 수",
+    "risk_signal_count": "리스크 신호 수",
+    "segment_label": "세그먼트",
+    "investor_type": "투자자 유형",
+    "account_type": "계좌 유형",
+    "join_date": "가입일",
+    "last_trade_date": "최근 거래일",
+    "preferred_sector": "선호 섹터",
+    "trading_frequency": "거래 빈도",
 }
 
 # 표시하지 않을 컨럼 (customer_id 등 내부용)
