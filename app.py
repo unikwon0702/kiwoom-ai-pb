@@ -133,18 +133,23 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
     customer_id: str | None = None
     customer_name: str | None = None
+    segment: str | None = None  # 세그먼트 코드 (SEG01~SEG04)
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    """AI PB 챗봇 - Genie Space 대화 (고객 컨텍스트 포함)"""
+    """AI PB 챗봇 - Genie Space 대화 (고객 세그먼트별 맞춤 응답)"""
     if not req.customer_id:
         raise HTTPException(400, "customer_id는 필수입니다. 고객을 먼저 선택해주세요.")
+    import logging
+    logger = logging.getLogger("app")
+    logger.info(f"[CHAT_API] customer_id={req.customer_id}, segment={req.segment}, question={req.question[:50]}")
     return genie.ask(
         question=req.question,
         conversation_id=req.conversation_id,
         customer_id=req.customer_id,
         customer_name=req.customer_name,
+        segment=req.segment,
     )
 
 

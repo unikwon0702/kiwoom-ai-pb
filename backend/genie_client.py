@@ -1,11 +1,52 @@
 """
 Genie Space 대화 API 클라이언트.
 AI_PB-Simulation_Test_V4(UPDATE) Space에 질문 전송.
+세그먼트별 고객 프로필을 기반으로 맞춤 응답을 생성.
 """
 from databricks.sdk import WorkspaceClient
 import time
 import os
 import re
+import logging
+
+logger = logging.getLogger("genie_client")
+logger.setLevel(logging.DEBUG)
+
+# ===== 세그먼트별 응답 가이드라인 =====
+SEGMENT_GUIDELINES = {
+    "SEG01": {  # 초보 감성
+        "label": "초보 감성",
+        "tone": "공감적이고 따뜻한 톤. 비유와 예시를 활용하여 쉽게 설명.",
+        "risk_guidance": "리스크를 부드럽게 전달하되 구체적 행동 가이드 제공. 원금 손실 가능성을 경고하되 불안을 자극하지 않도록.",
+        "recommendation_style": "왜 이 방향이 좋은지 이유를 감성적으로 설명. '안심할 수 있는 포인트'를 먼저 제시.",
+        "structure": "핵심 요약 → 공감 멘트 → 구체적 설명(비유 포함) → 안심 포인트 → 다음 행동 제안",
+        "avoid": "전문 용어 남발, 숫자만 나열, 차가운 경고 톤",
+    },
+    "SEG02": {  # 초보 단순
+        "label": "초보 단순",
+        "tone": "명확하고 간결한 톤. 핵심만 전달. 전문용어 사용 금지.",
+        "risk_guidance": "위험/안전을 ◯/✕로 명확히 구분. 복잡한 설명 없이 '해야 할 것'과 '하지 말아야 할 것' 제시.",
+        "recommendation_style": "결론 먼저, 근거는 1~2문장. 행동 지침을 리스트로.",
+        "structure": "결론(1문장) → 핵심 수치(2~3개) → 해야 할 행동 → 주의사항",
+        "avoid": "긴 설명, 여러 옵션 제시, 감성적 표현, 조건부 문장",
+    },
+    "SEG03": {  # 고수 감성
+        "label": "고수 감성",
+        "tone": "깊이 있는 분석 + 인사이트 중심. 시장 맥락과 스토리를 함께 제공.",
+        "risk_guidance": "리스크를 시장 환경/매크로 맥락에서 해석. 시나리오별 영향도 분석. 전문 지표(MDD, 샤프비율 등) 활용 가능.",
+        "recommendation_style": "복수의 전략 옵션을 시나리오별로 제시. 각 옵션의 장단점과 시장 조건을 연결.",
+        "structure": "시장 맥락 요약 → 깊이 있는 진단 → 시나리오별 전략 → 핵심 인사이트 → 모니터링 포인트",
+        "avoid": "지나치게 단순화, 초보자용 설명, 결론만 제시하고 근거 누락",
+    },
+    "SEG04": {  # 고수 단순
+        "label": "고수 단순",
+        "tone": "수치 중심 간결 답변. 결론 먼저, 데이터로 뒷받침.",
+        "risk_guidance": "핵심 리스크 지표를 수치로 직접 제시. 임계값 기준 판단. 불필요한 부연 없이 팩트 전달.",
+        "recommendation_style": "액션 아이템을 수치 기준으로 제시. '~% 이상이면 ~하라' 형태.",
+        "structure": "결론(수치 포함) → 핵심 지표 테이블 → 임계값 기준 판단 → 액션 아이템",
+        "avoid": "감성적 표현, 긴 배경 설명, 비유, 불확실한 조언",
+    },
+}
 
 
 class GenieChatClient:
@@ -15,8 +56,15 @@ class GenieChatClient:
         self.timeout = timeout
 
     def ask(self, question: str, conversation_id: str = None,
-            customer_id: str = None, customer_name: str = None) -> dict:
-        enriched = self._inject_context(question, customer_id, customer_name)
+            customer_id: str = None, customer_name: str = None,
+            segment: str = None) -> dict:
+        """Genie Space에 질문 전송. segment를 기반으로 맞춤 프롬프트 생성."""
+        enriched = self._inject_context(question, customer_id, customer_name, segment)
+
+        # 디버깅 로그
+        logger.info(f"[GENIE_REQUEST] customer_id={customer_id}, segment={segment}, question={question[:50]}")
+        logger.debug(f"[GENIE_PAYLOAD] enriched_prompt={enriched[:300]}...")
+
         conv_id = conversation_id
         if not conv_id:
             resp = self.w.api_client.do(
@@ -57,16 +105,42 @@ class GenieChatClient:
         mid = msg_resp.get('message_id') or msg_resp.get('id')
         return self._poll(conv_id, mid)
 
-    def _inject_context(self, question, customer_id, customer_name):
+    def _inject_context(self, question, customer_id, customer_name, segment=None):
+        """고객 세그먼트 프로필 + 응답 가이드라인을 포함한 컨텍스트 주입."""
         if not customer_id:
             return question
+
         display_name = customer_name or customer_id
-        # customer_id를 자연어와 분리 — Genie가 답변에 ID를 반복하지 않도록
-        return (
-            f"{display_name}님의 {question}\n\n"
-            f"---\n"
-            f"SQL 필터: customer_id = '{customer_id}' (답변에 customer_id 값을 노출하지 마세요)"
+        guide = SEGMENT_GUIDELINES.get(segment, {})
+
+        if not guide:
+            # segment 매핑 실패 시 기본 동작 (기존과 유사)
+            logger.warning(f"[GENIE] Unknown segment '{segment}' for {customer_id}. Falling back to basic context.")
+            return (
+                f"{display_name}님의 {question}\n\n"
+                f"---\n"
+                f"SQL 필터: customer_id = '{customer_id}' (답변에 customer_id 값을 노출하지 마세요)"
+            )
+
+        # 세그먼트별 풍부한 컨텍스트 구성
+        context = (
+            f"[고객 프로필]\n"
+            f"- 고객명: {display_name}\n"
+            f"- 세그먼트: {guide['label']} ({segment})\n"
+            f"- SQL 필터 조건: customer_id = '{customer_id}'\n\n"
+            f"[응답 가이드라인 — 이 고객 세그먼트에 맞게 반드시 적용]\n"
+            f"- 톤앤매너: {guide['tone']}\n"
+            f"- 리스크 전달 방식: {guide['risk_guidance']}\n"
+            f"- 추천/제안 방식: {guide['recommendation_style']}\n"
+            f"- 답변 구조: {guide['structure']}\n"
+            f"- 금지사항: {guide['avoid']}\n\n"
+            f"[규칙]\n"
+            f"- 답변에 customer_id 값(CUST0010 등)을 절대 노출하지 마세요.\n"
+            f"- '{display_name}님'으로만 지칭하세요.\n"
+            f"- 내부 테이블명, 스키마명을 노출하지 마세요.\n\n"
+            f"사용자 질문: {question}"
         )
+        return context
 
     def _poll(self, conv_id, message_id):
         start = time.time()
