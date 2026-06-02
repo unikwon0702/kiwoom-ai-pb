@@ -216,7 +216,154 @@ COLUMN_DISPLAY_NAMES = {
     "last_trade_date": "최근 거래일",
     "preferred_sector": "선호 섹터",
     "trading_frequency": "거래 빈도",
+    # 추가 매핑 (Genie 반환 컨럼)
+    "asset_type": "자산유형",
+    "purchase_amount": "매수금액",
+    "purchase_price": "매수가",
+    "quantity": "수량",
+    "weight": "비중",
+    "return_rate": "수익률",
+    "profit_loss": "손익",
+    "profit_loss_amount": "손익금액",
+    "stock_name": "종목명",
+    "product_name": "상품명",
+    "product_type": "상품유형",
+    "maturity_date": "만기일",
+    "issue_date": "발행일",
+    "asset_class": "자산군",
+    "sub_asset_type": "세부유형",
+    "market_value": "시장가치",
+    "book_value": "장부가",
+    "unrealized_pnl": "미실현손익",
+    # 추가: Genie가 반환할 수 있는 모든 컨럼
+    "name": "명칭",
+    "type": "유형",
+    "status": "상태",
+    "date": "날짜",
+    "description": "설명",
+    "count": "건수",
+    "total": "합계",
+    "avg": "평균",
+    "max": "최대",
+    "min": "최소",
+    "ratio": "비율",
+    "amount": "금액",
+    "price": "가격",
+    "value": "값",
+    "score": "점수",
+    "level": "등급",
+    "grade": "등급",
+    "rank": "순위",
+    "rate": "비율",
+    "change": "변동",
+    "change_rate": "변동률",
+    "change_amount": "변동금액",
+    "prev_close": "전일 종가",
+    "open_price": "시가",
+    "high_price": "고가",
+    "low_price": "저가",
+    "close_price": "종가",
+    "volume": "거래량",
+    "turnover": "거래대금",
+    "market_cap": "시가총액",
+    "dividend_yield": "배당수익률",
+    "eps": "EPS",
+    "bps": "BPS",
+    "roe": "ROE",
+    "roa": "ROA",
+    "debt_ratio": "부채비율",
+    "operating_profit": "영업이익",
+    "net_income": "순이익",
+    "revenue": "매출액",
+    "duration": "듀레이션",
+    "coupon_rate": "표면금리",
+    "yield_to_maturity": "만기수익률",
+    "credit_rating": "신용등급",
+    "nav": "NAV",
+    "expense_ratio": "보보수수료",
+    "benchmark": "벤치마크",
+    "tracking_error": "추적오차",
+    "total_assets": "총 자산",
+    "inception_date": "설정일",
+    "fund_manager": "펀드매니저",
+    "investment_region": "투자 지역",
+    "investment_strategy": "투자 전략",
+    "underlying_asset": "기초자산",
+    "knock_in": "녹인",
+    "knock_in_barrier": "녹인 배리어",
+    "early_redemption": "조기상환",
+    "remaining_days": "잔여일",
+    "interest_rate": "금리",
+    "base_rate": "기준금리",
+    "exchange_rate": "환율",
+    "usd_krw": "달러/원",
+    "vix": "VIX",
+    "kospi": "KOSPI",
+    "kosdaq": "KOSDAQ",
+    "s_and_p_500": "S&P500",
+    "nasdaq": "NASDAQ",
+    "oil_price": "유가",
+    "gold_price": "금가격",
+    "created_at": "생성일",
+    "updated_at": "수정일",
+    "expired_at": "만료일",
+    "start_date": "시작일",
+    "end_date": "종료일",
+    "trade_date": "거래일",
+    "settlement_date": "결제일",
+    "portfolio_as_of_date": "포트폴리오 기준일",
+    "preferred_product_group": "선호 상품군",
+    "stock_holding_count": "주식 보유 수",
+    "etf_holding_count": "ETF 보유 수",
+    "fund_holding_count": "펀드 보유 수",
+    "bond_holding_count": "채권 보유 수",
+    "derivative_holding_count": "파생상품 보유 수",
+    "overseas_ratio": "해외 비율",
+    "domestic_ratio": "국내 비율",
+    "stock_ratio": "주식 비율",
+    "cash_like_ratio": "현금성 비율",
 }
+
+
+def _get_korean_column_name(col: str) -> str:
+    """
+    컨럼명을 한글로 변환.
+    1. COLUMN_DISPLAY_NAMES 매핑에 있으면 사용
+    2. 없으면 snake_case를 자동 변환 (word별 부분 매핑)
+    """
+    # 1. 정확한 매핑
+    if col in COLUMN_DISPLAY_NAMES:
+        return COLUMN_DISPLAY_NAMES[col]
+
+    # 2. 자동 변환: snake_case 단어별 한글 매핑 시도
+    WORD_MAP = {
+        "total": "총", "avg": "평균", "max": "최대", "min": "최소",
+        "count": "수", "sum": "합계", "amount": "금액", "rate": "비율",
+        "ratio": "비율", "score": "점수", "level": "등급", "weight": "비중",
+        "price": "가격", "value": "값", "name": "명", "type": "유형",
+        "date": "일자", "status": "상태", "signal": "신호",
+        "return": "수익률", "profit": "수익", "loss": "손실",
+        "asset": "자산", "stock": "주식", "bond": "채권", "fund": "펀드",
+        "etf": "ETF", "holding": "보유", "portfolio": "포트폴리오",
+        "customer": "고객", "market": "시장", "risk": "위험",
+        "domestic": "국내", "foreign": "해외", "overseas": "해외",
+        "current": "현재", "target": "목표", "previous": "이전",
+        "investment": "투자", "valuation": "평가", "purchase": "매수",
+        "sector": "섹터", "industry": "업종", "category": "분류",
+        "change": "변동", "period": "기간", "days": "일",
+        "concentration": "집중도", "diversification": "분산",
+        "rebalance": "리밸런싱", "alert": "알림",
+    }
+
+    parts = col.lower().split("_")
+    translated = [WORD_MAP.get(p, p) for p in parts]
+    result = " ".join(translated)
+
+    # 전체가 영어로만 구성되면 원본 그대로 (fallback)
+    if all(c.isascii() for c in result.replace(" ", "")):
+        return col  # 변환 실패 → 원본 컨럼명 표시
+
+    return result
 
 # 표시하지 않을 컨럼 (customer_id 등 내부용)
 HIDDEN_COLUMNS = {"customer_id", "account_id", "holding_id", "asset_id", "scenario_id", "investor_profile_id"}
@@ -347,38 +494,78 @@ def _build_single_row_sections(intent: str, row_dict: dict) -> list:
     return sections
 
 
+# Intent별 우선 표시 컨럼 (순서대로 우선 선택)
+PRIORITY_COLUMNS = {
+    "portfolio_allocation_summary": [
+        "asset_name", "stock_name", "product_name", "name",  # 종목/상품명
+        "asset_type", "product_type", "type",  # 유형
+        "holding_weight", "weight", "ratio",  # 비중
+        "valuation_amount", "market_value", "amount",  # 평가금액
+        "purchase_amount", "book_value",  # 매수금액
+        "valuation_return_rate", "return_rate",  # 수익률
+    ],
+    "portfolio_diagnosis": [
+        "asset_name", "stock_name", "name",
+        "holding_weight", "weight",
+        "valuation_amount",
+        "valuation_return_rate", "return_rate",
+        "signal_name", "risk_notice_required",
+    ],
+    "holding_risk_check": [
+        "asset_name", "stock_name", "name",
+        "signal_name", "signal_category",
+        "interpretation", "signal_interpretation",
+        "risk_notice_required",
+        "holding_weight",
+    ],
+    "risk_alert": [
+        "asset_name", "signal_name",
+        "signal_category", "interpretation",
+        "risk_notice_required",
+        "impact_level", "title",
+    ],
+}
+
+
 def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
-    """복수 행 데이터를 종목별 카드 형태로 변환."""
+    """복수 행 데이터를 Intent별 핵심 컨럼만 선별하여 테이블 + 차트로 변환."""
     sections = []
 
-    # 종목명 컨럼 찾기
-    name_col_idx = None
-    for i, c in enumerate(columns):
-        if c in ("asset_name", "signal_name", "title"):
-            name_col_idx = i
+    # Intent별 우선 컨럼 선택
+    priority_cols = PRIORITY_COLUMNS.get(intent, [])
+
+    # 우선순위에 따라 컨럼 선택 (있는 것만, 최대 5개)
+    display_cols = []
+    for col_name in priority_cols:
+        if col_name in columns:
+            idx = columns.index(col_name)
+            if idx not in display_cols:
+                display_cols.append(idx)
+        if len(display_cols) >= 5:
             break
 
-    # 핵심 컨럼만 선별 (내부 ID 제외, 최대 5개 컨럼)
-    display_cols = []
-    for i, c in enumerate(columns):
-        if c.lower() in HIDDEN_COLUMNS:
-            continue
-        if c in ("customer_name",):  # 중복 정보 제외
-            continue
-        display_cols.append(i)
-        if len(display_cols) >= 6:
-            break
+    # 우선 컨럼이 3개 미만이면 fallback: 내부 ID 제외 후 앞에서 5개
+    if len(display_cols) < 3:
+        display_cols = []
+        for i, c in enumerate(columns):
+            if c.lower() in HIDDEN_COLUMNS:
+                continue
+            if c in ("customer_name",):
+                continue
+            display_cols.append(i)
+            if len(display_cols) >= 5:
+                break
 
     if not display_cols:
         return []
 
-    display_headers = [COLUMN_DISPLAY_NAMES.get(columns[i], columns[i]) for i in display_cols]
+    display_headers = [_get_korean_column_name(columns[i]) for i in display_cols]
     display_rows = []
     for row in rows[:8]:
-        display_rows.append([_format_value(row[i]) for i in display_cols])
+        display_rows.append([_format_value(row[i], columns[i]) for i in display_cols])
 
     title_map = {
-        "portfolio_allocation_summary": "자산 유형별 현황",
+        "portfolio_allocation_summary": "보유 종목 현황",
         "portfolio_diagnosis": "보유 종목 현황",
         "holding_risk_check": "종목별 위험도",
         "risk_alert": "위험 신호 목록",
@@ -393,6 +580,44 @@ def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
             "rows": display_rows,
         }
     })
+
+    # --- 조회형 intent: 비중 컨럼이 있으면 도넛 차트 자동 생성 ---
+    if intent == "portfolio_allocation_summary":
+        # 종목명 + 비중 컨럼 찾기
+        name_idx = None
+        weight_idx = None
+        for i, c in enumerate(columns):
+            if c in ("asset_name", "stock_name", "product_name", "name") and name_idx is None:
+                name_idx = i
+            if c in ("holding_weight", "weight", "ratio") and weight_idx is None:
+                weight_idx = i
+
+        if name_idx is not None and weight_idx is not None:
+            chart_data = []
+            for row in rows[:10]:
+                name = str(row[name_idx]) if row[name_idx] else "?"
+                try:
+                    w = float(row[weight_idx])
+                    pct = w * 100 if w <= 1.0 else w
+                    if pct > 0:
+                        chart_data.append({"name": name, "value": round(pct, 1)})
+                except (ValueError, TypeError):
+                    pass
+
+            if chart_data:
+                total = sum(d["value"] for d in chart_data)
+                if total < 99:
+                    chart_data.append({"name": "기타", "value": round(100 - total, 1)})
+
+                sections.append({
+                    "section_type": "chart_data",
+                    "title": "비중 분포",
+                    "icon": "🥧",
+                    "content": {
+                        "chart_type": "donut",
+                        "data": chart_data,
+                    }
+                })
 
     return sections
 
