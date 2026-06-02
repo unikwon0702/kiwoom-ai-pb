@@ -97,6 +97,103 @@ def build_structured_response(
 
 
 # ============================================================
+# 영문 컨럼명 → 한글 표시명 매핑
+# ============================================================
+
+COLUMN_DISPLAY_NAMES = {
+    "customer_name": "고객명",
+    "customer_id": "고객 ID",
+    "age_group": "연령대",
+    "investment_level": "투자 레벨",
+    "risk_profile": "위험 성향",
+    "investor_risk_profile": "투자자 위험 성향",
+    "investment_style": "투자 스타일",
+    "investment_goal": "투자 목표",
+    "portfolio_risk_level": "포트폴리오 위험등급",
+    "diversification_score": "분산 점수",
+    "concentration_level": "집중도",
+    "total_holding_count": "보유 종목 수",
+    "domestic_stock_ratio": "국내주식 비율",
+    "foreign_stock_ratio": "해외주식 비율",
+    "etf_ratio": "ETF 비율",
+    "fund_ratio": "펀드 비율",
+    "bond_ratio": "채권 비율",
+    "derivative_ratio": "파생상품 비율",
+    "top1_asset_weight": "1위 종목 비중",
+    "top3_asset_weight": "상위 3종목 비중",
+    "top_concentrated_sector": "최대 집중 섹터",
+    "top_sector_weight": "최대 섹터 비중",
+    "avg_return": "평균 수익률",
+    "total_profit": "총 수익",
+    "total_loss": "총 손실",
+    "loss_asset_count": "손실 종목 수",
+    "concentration_alert": "집중도 경고",
+    "rebalance_frequency": "리밸런싱 빈도",
+    "portfolio_theme": "포트폴리오 테마",
+    "valuation_amount": "평가금액",
+    "valuation_return_rate": "수익률",
+    "holding_weight": "비중",
+    "asset_name": "종목명",
+    "signal_name": "신호명",
+    "signal_code": "신호 코드",
+    "signal_category": "신호 유형",
+    "interpretation": "해석",
+    "signal_interpretation": "신호 해석",
+    "holding_quantity": "보유 수량",
+    "average_buy_price": "평균 매수가",
+    "valuation_profit_loss_amount": "평가 손익",
+    "holding_period_days": "보유 기간(일)",
+    "sector": "섹터",
+    "market": "시장",
+    "current_price": "현재가",
+    "rsi": "RSI",
+    "rsi_signal": "RSI 신호",
+    "volatility": "변동성",
+    "mdd": "MDD",
+    "beta": "베타",
+    "sharpe_ratio": "샤프비율",
+    "per": "PER",
+    "pbr": "PBR",
+    "macd": "MACD",
+    "news_sentiment": "뉴스 센티먼트",
+    "signal_date": "신호 일자",
+    "indicator_value_num": "지표 값",
+    "risk_notice_required": "위험 경고 필요",
+    "rebalance_needed": "리밸런싱 필요",
+    "rebalance_urgency": "긴급도",
+    "overweight_assets": "과대 비중 종목",
+    "loss_cut_candidates": "손절 후보",
+    "underweight_suggestion": "비중 확대 제안",
+    "rebalance_action_summary": "리밸런싱 요약",
+    "target_stock_ratio": "목표 주식 비율",
+    "target_bond_ratio": "목표 채권 비율",
+    "market_segment": "시장 구분",
+    "briefing_text": "브리핑",
+    "market_regime": "시장 국면",
+    "market_sentiment": "시장 심리",
+    "top_gainer_asset": "상승 1위",
+    "top_loser_asset": "하락 1위",
+    "total_event_count": "이벤트 수",
+    "avg_impact_score": "평균 영향도",
+    "latest_event_title": "최신 이벤트",
+    "action_recommendation": "액션 제안",
+    "customer_risk_profile": "고객 위험 성향",
+    "high_impact_event_cards": "고영향 이벤트",
+    "top_action_recommendation": "최우선 액션",
+    "card_type": "카드 유형",
+    "impact_level": "영향도",
+    "title": "제목",
+    "summary": "요약",
+    "published_at": "발행일",
+    "segment_2x2_code": "세그먼트 코드",
+    "segment_name": "세그먼트명",
+}
+
+# 표시하지 않을 컨럼 (customer_id 등 내부용)
+HIDDEN_COLUMNS = {"customer_id", "account_id", "holding_id", "asset_id", "scenario_id", "investor_profile_id"}
+
+
+# ============================================================
 # Genie table_data → Sections
 # ============================================================
 
@@ -110,17 +207,21 @@ def _build_sections_from_genie(intent: str, table_data: dict | None) -> list:
     if not columns or not rows:
         return []
 
+    # 내부용 컨럼 제외 + 한글 매핑
+    visible_indices = [i for i, c in enumerate(columns) if c.lower() not in HIDDEN_COLUMNS]
+    display_headers = [COLUMN_DISPLAY_NAMES.get(columns[i], columns[i]) for i in visible_indices]
+
     # metrics_table section으로 변환 (행 수 제한: 최대 10행)
     display_rows = []
     for row in rows[:10]:
-        display_rows.append([_format_value(v) for v in row])
+        display_rows.append([_format_value(row[i]) for i in visible_indices])
 
     section = {
         "section_type": "metrics_table",
         "title": "주요 지표" if intent == "portfolio_diagnosis" else "데이터 요약",
         "icon": "📊",
         "content": {
-            "headers": columns,
+            "headers": display_headers,
             "rows": display_rows,
         }
     }
