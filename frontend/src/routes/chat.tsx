@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
 // @ts-ignore
 import ReactMarkdown from "react-markdown";
+// @ts-ignore
+import remarkGfm from "remark-gfm";
 import {
   PieChart, Pie, Cell,
   Tooltip, ResponsiveContainer
