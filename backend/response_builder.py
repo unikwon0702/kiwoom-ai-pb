@@ -228,7 +228,27 @@ def _build_sections_from_genie(intent: str, table_data: dict | None) -> list:
     visible_indices = [i for i, c in enumerate(columns) if c.lower() not in HIDDEN_COLUMNS]
     display_headers = [COLUMN_DISPLAY_NAMES.get(columns[i], columns[i]) for i in visible_indices]
 
-    # metrics_table section으로 변환 (행 수 제한: 최대 10행)
+    # 1행 + 컨럼 5개 초과 → 세로(항목/값) 형태로 전환
+    if len(rows) == 1 and len(visible_indices) > 4:
+        row = rows[0]
+        vertical_rows = []
+        for idx in visible_indices:
+            header = COLUMN_DISPLAY_NAMES.get(columns[idx], columns[idx])
+            value = _format_value(row[idx])
+            vertical_rows.append([header, value])
+
+        section = {
+            "section_type": "metrics_table",
+            "title": "주요 지표" if intent == "portfolio_diagnosis" else "데이터 요약",
+            "icon": "📊",
+            "content": {
+                "headers": ["항목", "값"],
+                "rows": vertical_rows,
+            }
+        }
+        return [section]
+
+    # 복수 행: 기존 가로 테이블
     display_rows = []
     for row in rows[:10]:
         display_rows.append([_format_value(row[i]) for i in visible_indices])
