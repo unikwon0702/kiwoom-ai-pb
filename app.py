@@ -139,19 +139,38 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    """AI PB 챗봇 - Genie Space 대화 (고객 세그먼트별 맞춤 응답)"""
+    """AI PB 챗봇 - Genie Space 대화 (고객 세그먼트별 맞춤 응답 + 구조화 카드 UI)"""
     if not req.customer_id:
         raise HTTPException(400, "customer_id는 필수입니다. 고객을 먼저 선택해주세요.")
     import logging
     logger = logging.getLogger("app")
     logger.info(f"[CHAT_API] customer_id={req.customer_id}, segment={req.segment}, question={req.question[:50]}")
-    return genie.ask(
+
+    # Genie 호출 (기존 로직)
+    genie_result = genie.ask(
         question=req.question,
         conversation_id=req.conversation_id,
         customer_id=req.customer_id,
         customer_name=req.customer_name,
         segment=req.segment,
     )
+
+    # 구조화 응답 시도 (실패 시 None → 기존 방식 유지)
+    try:
+        structured = build_structured_response(
+            genie_result=genie_result,
+            customer_id=req.customer_id,
+            customer_name=req.customer_name,
+            segment=req.segment,
+            db=db,
+            question=req.question,
+        )
+        if structured:
+            genie_result["structured"] = structured
+    except Exception as e:
+        logger.warning(f"[CHAT_API] Structured response failed (fallback): {e}")
+
+    return genie_result
 
 
 # ===== React SPA Static Serving =====
