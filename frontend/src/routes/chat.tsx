@@ -445,6 +445,7 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
             {msg.text && (
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
                     ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
