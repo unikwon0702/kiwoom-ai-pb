@@ -51,7 +51,7 @@ def build_structured_response(
             return None
 
         # Intent별 응답 전략 결정
-        is_lookup_intent = intent in ("portfolio_allocation_summary",)
+        is_lookup_intent = intent in ("portfolio_allocation_summary", "holding_loss_detail", "holding_profit_detail")
 
         # 2. Genie table_data에서 sections 생성 + row_dict 추출 (상태 판정용)
         table_data = genie_result.get("table_data")
@@ -92,7 +92,7 @@ def build_structured_response(
             },
             "headline": _build_headline(intent, customer_name, segment),
             "summary": genie_result.get("answer", ""),  # Genie 원문 그대로
-            "overall_status": _infer_status(intent, sections),
+            "overall_status": _infer_status(intent, sections, row_dict),
             "sections": sections,
             # 조회형 intent는 액션 아이템 생성 안 함
             "recommended_actions": [] if is_lookup_intent else _extract_actions(sections),
@@ -322,6 +322,28 @@ COLUMN_DISPLAY_NAMES = {
     "domestic_ratio": "국내 비율",
     "stock_ratio": "주식 비율",
     "cash_like_ratio": "현금성 비율",
+    # Genie 집계 컨럼 (스크린샷에서 확인된 누락)
+    "total_weight": "비중",
+    "total_valuation": "평가금액",
+    "total_pnl": "손익",
+    "total_count": "종목 수",
+    "total_purchase": "매수금액",
+    "avg_return": "평균 수익률",
+    "avg_weight": "평균 비중",
+    "sum_valuation": "이 평가금액",
+    "sum_pnl": "총 손익",
+    "max_weight": "최대 비중",
+    "min_return_rate": "최저 수익률",
+    "max_return_rate": "최고 수익률",
+    "pnl": "손익",
+    "pnl_amount": "손익금액",
+    "avg_buy_price": "평균 매수가",
+    "current_price": "현재가",
+    "holding_period_days": "보유 기간(일)",
+    "holding_quantity": "보유 수량",
+    "valuation_profit_loss_amount": "평가손익",
+    "valuation_return_rate": "평가수익률",
+    "average_buy_price": "평균매수가",
 }
 
 
@@ -499,10 +521,26 @@ PRIORITY_COLUMNS = {
     "portfolio_allocation_summary": [
         "asset_name", "stock_name", "product_name", "name",  # 종목/상품명
         "asset_type", "product_type", "type",  # 유형
-        "holding_weight", "weight", "ratio",  # 비중
-        "valuation_amount", "market_value", "amount",  # 평가금액
+        "holding_weight", "weight", "ratio", "total_weight",  # 비중
+        "valuation_amount", "market_value", "amount", "total_valuation",  # 평가금액
         "purchase_amount", "book_value",  # 매수금액
+        "valuation_return_rate", "return_rate", "total_pnl",  # 수익/손익
+    ],
+    "holding_loss_detail": [
+        "asset_name", "stock_name", "product_name", "name",  # 종목명
+        "valuation_profit_loss_amount", "profit_loss_amount", "profit_loss", "total_pnl",  # 손익금액
         "valuation_return_rate", "return_rate",  # 수익률
+        "valuation_amount", "market_value", "total_valuation",  # 평가금액
+        "holding_weight", "weight", "total_weight",  # 비중
+        "asset_type", "product_type",  # 유형
+    ],
+    "holding_profit_detail": [
+        "asset_name", "stock_name", "product_name", "name",  # 종목명
+        "valuation_profit_loss_amount", "profit_loss_amount", "profit_loss", "total_pnl",  # 수익금액
+        "valuation_return_rate", "return_rate",  # 수익률
+        "valuation_amount", "market_value", "total_valuation",  # 평가금액
+        "holding_weight", "weight", "total_weight",  # 비중
+        "asset_type", "product_type",  # 유형
     ],
     "portfolio_diagnosis": [
         "asset_name", "stock_name", "name",
@@ -565,7 +603,9 @@ def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
         display_rows.append([_format_value(row[i], columns[i]) for i in display_cols])
 
     title_map = {
-        "portfolio_allocation_summary": "보유 종목 현황",
+        "portfolio_allocation_summary": "자산 유형별 현황",
+        "holding_loss_detail": "손실 종목 현황",
+        "holding_profit_detail": "수익 종목 현황",
         "portfolio_diagnosis": "보유 종목 현황",
         "holding_risk_check": "종목별 위험도",
         "risk_alert": "위험 신호 목록",
@@ -715,21 +755,22 @@ def _format_value(v, col_name: str = "") -> str:
     if "count" in col_lower:
         return f"{int(num_val)}개"
 
-    # 금액 필드 (amount, valuation, profit, loss, price)
-    if any(kw in col_lower for kw in ["amount", "valuation_amount", "profit", "loss", "price", "total_profit", "total_loss"]):
+    # 비율/수익률 필드 (ratio, rate, return, weight) — 금액보다 우선!
+    # valuation_return_rate 같은 컨럼이 "valuation" 때문에 금액으로 잘못 잡히는 것 방지
+    if any(kw in col_lower for kw in ["ratio", "rate", "return", "weight"]):
+        if abs(num_val) <= 1.0:
+            return f"{num_val * 100:.1f}%"
+        else:
+            return f"{num_val:.1f}%"
+
+    # 금액 필드 (amount, valuation, profit, loss, price, pnl)
+    if any(kw in col_lower for kw in ["amount", "valuation_amount", "profit", "loss", "price", "total_profit", "total_loss", "pnl", "valuation", "purchase"]):
         if abs(num_val) >= 100_000_000:  # 1억 이상
             return f"{num_val/100_000_000:.1f}억원"
         elif abs(num_val) >= 10_000:  # 1만 이상
             return f"{num_val/10_000:.0f}만원"
         else:
             return f"{num_val:,.0f}원"
-
-    # 비율/수익률 필드 (ratio, rate, return, weight, score는 제외)
-    if any(kw in col_lower for kw in ["ratio", "rate", "return", "weight"]):
-        if abs(num_val) <= 1.0:
-            return f"{num_val * 100:.1f}%"
-        else:
-            return f"{num_val:.1f}%"
 
     # 건수 필드 (count)
     if "count" in col_lower:
@@ -761,6 +802,8 @@ def _build_headline(intent: str, customer_name: str | None, segment: str | None)
     name = customer_name or ""
     titles = {
         "portfolio_allocation_summary": "자산 구성 현황",
+        "holding_loss_detail": "손실 종목 현황",
+        "holding_profit_detail": "수익 종목 현황",
         "portfolio_diagnosis": "포트폴리오 종합 진단",
         "rebalancing_recommendation": "리밸런싱 추천",
         "holding_risk_check": "보유 종목 위험도 점검",
@@ -789,8 +832,12 @@ def _infer_status(intent: str, sections: list, row_dict: dict | None = None) -> 
       - 정상: 리스크 신호 0~3건, 위험등급 '낮음'
     """
     # 조회형 intent는 항상 info
-    if intent == "portfolio_allocation_summary":
+    if intent in ("portfolio_allocation_summary", "holding_profit_detail"):
         return {"level": "info", "label": "조회", "reason": ""}
+
+    # 손실 조회는 caution (status로 상태 알림)
+    if intent == "holding_loss_detail":
+        return {"level": "caution", "label": "손실 현황", "reason": "손실 중인 종목 현황"}
 
     # 실제 데이터 기반 판정
     if row_dict:

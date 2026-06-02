@@ -34,13 +34,26 @@ LOOKUP_SIGNAL_KEYWORDS = [
     "얼마야", "얼마인지", "얼마인가",
 ]
 
-# 조회 대상 키워드 (자산 구성/구조 정보)
+# 조회 대상 키워드 (자산 구성/구조 정보 — 순수 구조 조회용)
 LOOKUP_TARGET_KEYWORDS = [
     "비중", "구성", "분포", "배분", "현황",
-    "평가금액", "수익률", "수익", "손실",
-    "자산 유형", "자산유형", "섹터별", "종목별",
+    "평가금액",
+    "자산 유형", "자산유형", "섹터별",
     "유형별", "합계", "총액",
     "보유 종목", "보유종목",
+]
+# 주의: '수익', '손실' 제거 — 이들은 조회가 아니라 손실/수익 종목 조회로 갈 수 있음
+
+# 손실/수익 종목 조회 신호 (이것이 있으면 holding_loss/profit_detail)
+LOSS_SIGNAL_KEYWORDS = [
+    "손실", "마이너스", "손실 중", "손실중",
+    "마이너스 종목", "손실 종목", "손해",
+    "내려간", "떨어진", "하락",
+]
+PROFIT_SIGNAL_KEYWORDS = [
+    "수익", "플러스", "수익 중", "수익중",
+    "수익 종목", "올라간", "올른",
+    "가장 많이 오른", "많이 오른",
 ]
 
 # 진단/분석/액션 의도 신호 (이것이 있으면 조회형이 아님)
@@ -75,11 +88,24 @@ TABLE_INTENT_MAP = {
 # 키워드 → intent 매핑
 # ============================================================
 INTENT_KEYWORDS = {
+    "holding_loss_detail": [
+        "손실 종목", "손실 중인", "손실중인",
+        "마이너스 종목", "마이너스인 종목",
+        "손실 현황", "손실 세부",
+        "손실", "마이너스",
+    ],
+    "holding_profit_detail": [
+        "수익 종목", "수익 중인", "수익중인",
+        "플러스인 종목", "플러스 종목",
+        "수익 현황", "수익 세부",
+        "수익", "플러스",
+        "가장 많이 오른", "많이 오른",
+    ],
     "portfolio_allocation_summary": [
         "비중", "구성", "분포", "현황", "평가금액",
         "자산 유형", "자산유형", "섹터별", "유형별",
         "합계", "총액", "종목별", "보유 종목",
-        "수익률", "수익", "손실",
+        "수익률",
     ],
     "portfolio_diagnosis": [
         "진단", "분석", "종합 진단", "종합분석",
@@ -90,8 +116,8 @@ INTENT_KEYWORDS = {
     ],
     "rebalancing_recommendation": [
         "리밸런싱", "비중 조절", "비중 줄여", "비중 늘려",
-        "매도 후보", "매도해야", "줄여야",
-        "축소", "확대", "조정",
+        "매도 후보", "매도해야", "매도할", "매도",
+        "줄여야", "축소", "확대", "조정",
     ],
     "holding_risk_check": [
         "위험한 종목", "위험 종목", "손절", "손절해야",
@@ -151,18 +177,36 @@ def classify(question: str, sql: str | None = None, answer: str | None = None) -
 def _classify_lookup_pattern(question: str) -> dict | None:
     """
     조회형 패턴 감지.
-    조건: 조회 대상 키워드가 있고 + 진단 신호가 없을 때
-    → portfolio_allocation_summary
+    우선순위:
+      1. 손실 종목 조회 (loss signal + no diagnosis)
+      2. 수익 종목 조회 (profit signal + no diagnosis)
+      3. 자산 구성 조회 (lookup target + no diagnosis)
     """
     has_lookup_target = any(kw in question for kw in LOOKUP_TARGET_KEYWORDS)
     has_diagnosis_signal = any(kw in question for kw in DIAGNOSIS_SIGNAL_KEYWORDS)
     has_lookup_signal = any(kw in question for kw in LOOKUP_SIGNAL_KEYWORDS)
+    has_loss_signal = any(kw in question for kw in LOSS_SIGNAL_KEYWORDS)
+    has_profit_signal = any(kw in question for kw in PROFIT_SIGNAL_KEYWORDS)
 
-    # 조회 대상이 있고 + 진단 신호가 없으면 → 단순 조회
+    # 1. 손실 종목 조회 (최우선)
+    if has_loss_signal and not has_diagnosis_signal:
+        confidence = 0.90
+        if has_lookup_signal:
+            confidence = 0.93
+        return {"intent": "holding_loss_detail", "confidence": confidence, "method": "lookup_pattern"}
+
+    # 2. 수익 종목 조회
+    if has_profit_signal and not has_diagnosis_signal:
+        confidence = 0.90
+        if has_lookup_signal:
+            confidence = 0.93
+        return {"intent": "holding_profit_detail", "confidence": confidence, "method": "lookup_pattern"}
+
+    # 3. 자산 구성 조회
     if has_lookup_target and not has_diagnosis_signal:
         confidence = 0.88
         if has_lookup_signal:
-            confidence = 0.92  # "보여줘", "확인해줘" 등 명시적 조회 요청
+            confidence = 0.92
         return {"intent": "portfolio_allocation_summary", "confidence": confidence, "method": "lookup_pattern"}
 
     return None
