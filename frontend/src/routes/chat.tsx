@@ -539,6 +539,32 @@ function SectionTextInsight({ content }: { content: any }) {
   return <p className="text-[13px] text-gray-700 leading-[1.7]">{content.text}</p>;
 }
 
+function SectionChart({ content }: { content: any }) {
+  const data = content?.data;
+  if (!data?.length) return null;
+  return (
+    <div className="flex items-center justify-center py-2">
+      <ResponsiveContainer width={160} height={160}>
+        <PieChart>
+          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} stroke="none">
+            {data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+          </Pie>
+          <Tooltip formatter={(v: number) => `${v}%`} />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="flex flex-col gap-1 ml-2">
+        {data.map((d: any, i: number) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <span className="size-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+            <span className="text-[11px] text-gray-600">{d.name}</span>
+            <span className="text-[11px] font-semibold text-gray-800 ml-auto">{d.value}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SectionActionList({ content }: { content: any }) {
   const { items } = content || {};
   if (!items?.length) return null;
