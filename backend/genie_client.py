@@ -106,7 +106,7 @@ class GenieChatClient:
         return self._poll(conv_id, mid)
 
     def _inject_context(self, question, customer_id, customer_name, segment=None):
-        """고객 세그먼트 프로필 + 응답 가이드라인을 포함한 컨텍스트 주입."""
+        """고객 세그먼트 프로필 + 응답 가이드라인을 포함한 컨텍스트 주입. (강화버전)"""
         if not customer_id:
             return question
 
@@ -114,31 +114,26 @@ class GenieChatClient:
         guide = SEGMENT_GUIDELINES.get(segment, {})
 
         if not guide:
-            # segment 매핑 실패 시 기본 동작 (기존과 유사)
             logger.warning(f"[GENIE] Unknown segment '{segment}' for {customer_id}. Falling back to basic context.")
             return (
-                f"{display_name}님의 {question}\n\n"
+                f"{display_name}님(customer_id: {customer_id})의 {question}\n\n"
                 f"---\n"
                 f"SQL 필터: customer_id = '{customer_id}' (답변에 customer_id 값을 노출하지 마세요)"
             )
 
-        # 세그먼트별 풍부한 컨텍스트 구성
+        # 강화된 프롬프트: 질문 먼저, 가이드라인을 강제 지시로 배치
         context = (
-            f"[고객 프로필]\n"
-            f"- 고객명: {display_name}\n"
-            f"- 세그먼트: {guide['label']} ({segment})\n"
-            f"- SQL 필터 조건: customer_id = '{customer_id}'\n\n"
-            f"[응답 가이드라인 — 이 고객 세그먼트에 맞게 반드시 적용]\n"
-            f"- 톤앤매너: {guide['tone']}\n"
-            f"- 리스크 전달 방식: {guide['risk_guidance']}\n"
-            f"- 추천/제안 방식: {guide['recommendation_style']}\n"
-            f"- 답변 구조: {guide['structure']}\n"
-            f"- 금지사항: {guide['avoid']}\n\n"
-            f"[규칙]\n"
-            f"- 답변에 customer_id 값(CUST0010 등)을 절대 노출하지 마세요.\n"
-            f"- '{display_name}님'으로만 지칭하세요.\n"
-            f"- 내부 테이블명, 스키마명을 노출하지 마세요.\n\n"
-            f"사용자 질문: {question}"
+            f"{display_name}님(customer_id: {customer_id})의 {question}\n\n"
+            f"─── 아래 응답 규칙을 반드시 따르세요 ───\n"
+            f"이 고객은 [{guide['label']}] 세그먼트입니다.\n"
+            f"▶ 톤: {guide['tone']}\n"
+            f"▶ 리스크 전달: {guide['risk_guidance']}\n"
+            f"▶ 추천 방식: {guide['recommendation_style']}\n"
+            f"▶ 답변 구조: {guide['structure']}\n"
+            f"▶ 절대 금지: {guide['avoid']}\n"
+            f"▶ customer_id를 답변에 노출하지 마세요. '{display_name}님'으로만 지칭.\n"
+            f"▶ 내부 테이블명, 스키마명을 노출하지 마세요.\n"
+            f"─── 위 규칙을 무시하면 안 됩니다 ───"
         )
         return context
 
