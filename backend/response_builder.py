@@ -211,11 +211,41 @@ HIDDEN_COLUMNS = {"customer_id", "account_id", "holding_id", "asset_id", "scenar
 
 
 # ============================================================
-# Genie table_data → Sections
+# Genie table_data → Sections (인텐트별 핵심 선별 + 차트 분리)
 # ============================================================
 
+# Intent별 핵심 지표 필드 정의 (표시명, 등급 배지)
+PORTFOLIO_KEY_METRICS = [
+    # (column_name, display_label, badge_fn)
+    ("total_valuation_amount", "총 평가금액", None),
+    ("valuation_amount", "총 평가금액", None),
+    ("total_return_rate", "전체 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
+    ("avg_return_rate", "평균 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
+    ("avg_return", "평균 수익률", lambda v: "🟢" if v and float(v) > 0 else "🔴"),
+    ("portfolio_risk_level", "포트폴리오 위험등급", lambda v: "🟠" if v and "높" in str(v) else "🟢"),
+    ("risk_signal_count", "리스크 신호", lambda v: "⚠️" if v and int(v) > 5 else ""),
+    ("total_holding_count", "보유 종목 수", None),
+    ("diversification_score", "분산 점수", None),
+    ("concentration_level", "집중도", lambda v: "🟠" if v and "높" in str(v) else ""),
+]
+
+# 도넛 차트용 비율 필드
+RATIO_FIELDS = [
+    ("domestic_ratio", "국내주식"),
+    ("domestic_stock_ratio", "국내주식"),
+    ("overseas_ratio", "해외주식"),
+    ("foreign_stock_ratio", "해외주식"),
+    ("stock_ratio", "주식"),
+    ("etf_ratio", "ETF"),
+    ("fund_ratio", "펀드"),
+    ("bond_ratio", "채권"),
+    ("derivative_ratio", "파생상품"),
+    ("cash_like_ratio", "현금성"),
+]
+
+
 def _build_sections_from_genie(intent: str, table_data: dict | None) -> list:
-    """Genie가 반환한 table_data를 sections으로 변환."""
+    """Genie가 반환한 table_data를 intent별로 핵심 선별하여 sections으로 변환."""
     if not table_data:
         return []
 
@@ -224,45 +254,124 @@ def _build_sections_from_genie(intent: str, table_data: dict | None) -> list:
     if not columns or not rows:
         return []
 
-    # 내부용 컨럼 제외 + 한글 매핑
-    visible_indices = [i for i, c in enumerate(columns) if c.lower() not in HIDDEN_COLUMNS]
-    display_headers = [COLUMN_DISPLAY_NAMES.get(columns[i], columns[i]) for i in visible_indices]
+    # 컨럼명 → 값 dict 생성 (1행인 경우)
+    if len(rows) == 1:
+        row_dict = {columns[i]: rows[0][i] for i in range(len(columns))}
+        return _build_single_row_sections(intent, row_dict)
+    else:
+        # 복수 행: 종목별 카드 형태
+        return _build_multi_row_sections(intent, columns, rows)
 
-    # 1행 + 컨럼 5개 초과 → 세로(항목/값) 형태로 전환
-    if len(rows) == 1 and len(visible_indices) > 4:
-        row = rows[0]
-        vertical_rows = []
-        for idx in visible_indices:
-            header = COLUMN_DISPLAY_NAMES.get(columns[idx], columns[idx])
-            value = _format_value(row[idx])
-            vertical_rows.append([header, value])
 
-        section = {
+def _build_single_row_sections(intent: str, row_dict: dict) -> list:
+    """단일 행 데이터를 핵심 지표 + 도넛 차트로 변환."""
+    sections = []
+
+    # --- Section 1: 핵심 지표 테이블 (5~6개만 선별) ---
+    metrics_rows = []
+    seen_labels = set()
+    for col_name, label, badge_fn in PORTFOLIO_KEY_METRICS:
+        if label in seen_labels:
+            continue
+        val = row_dict.get(col_name)
+        if val is not None and val != "" and str(val).lower() != "none":
+            formatted = _format_value(val)
+            badge = badge_fn(val) if badge_fn else ""
+            metrics_rows.append([label, formatted, badge])
+            seen_labels.add(label)
+        if len(metrics_rows) >= 6:
+            break
+
+    if metrics_rows:
+        sections.append({
             "section_type": "metrics_table",
-            "title": "주요 지표" if intent == "portfolio_diagnosis" else "데이터 요약",
-            "icon": "📊",
+            "title": "종합 등급",
+            "icon": "🧨",
             "content": {
-                "headers": ["항목", "값"],
-                "rows": vertical_rows,
+                "headers": ["항목", "수치", "등급"],
+                "rows": metrics_rows,
             }
-        }
-        return [section]
+        })
 
-    # 복수 행: 기존 가로 테이블
+    # --- Section 2: 자산 배분 도넛 차트 ---
+    chart_data = []
+    seen_chart_labels = set()
+    for col_name, chart_label in RATIO_FIELDS:
+        if chart_label in seen_chart_labels:
+            continue
+        val = row_dict.get(col_name)
+        if val is not None:
+            try:
+                num_val = float(val)
+                if num_val > 0:
+                    # 비율이 0~1 사이면 %로 변환
+                    pct = num_val * 100 if num_val <= 1.0 else num_val
+                    chart_data.append({"name": chart_label, "value": round(pct, 1)})
+                    seen_chart_labels.add(chart_label)
+            except (ValueError, TypeError):
+                pass
+
+    if chart_data:
+        # 기타 계산 (100%에서 나머지)
+        total = sum(d["value"] for d in chart_data)
+        if total < 99:
+            chart_data.append({"name": "기타", "value": round(100 - total, 1)})
+
+        sections.append({
+            "section_type": "chart_data",
+            "title": "자산 배분 구성",
+            "icon": "🥧",
+            "content": {
+                "chart_type": "donut",
+                "data": chart_data,
+            }
+        })
+
+    return sections
+
+
+def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
+    """복수 행 데이터를 종목별 카드 형태로 변환."""
+    sections = []
+
+    # 종목명 컨럼 찾기
+    name_col_idx = None
+    for i, c in enumerate(columns):
+        if c in ("asset_name", "signal_name", "title"):
+            name_col_idx = i
+            break
+
+    # 핵심 컨럼만 선별 (내부 ID 제외, 최대 5개 컨럼)
+    display_cols = []
+    for i, c in enumerate(columns):
+        if c.lower() in HIDDEN_COLUMNS:
+            continue
+        if c in ("customer_name",):  # 중복 정보 제외
+            continue
+        display_cols.append(i)
+        if len(display_cols) >= 6:
+            break
+
+    if not display_cols:
+        return []
+
+    display_headers = [COLUMN_DISPLAY_NAMES.get(columns[i], columns[i]) for i in display_cols]
     display_rows = []
-    for row in rows[:10]:
-        display_rows.append([_format_value(row[i]) for i in visible_indices])
+    for row in rows[:8]:
+        display_rows.append([_format_value(row[i]) for i in display_cols])
 
-    section = {
+    title = "보유 종목 현황" if intent == "portfolio_diagnosis" else "데이터 요약"
+    sections.append({
         "section_type": "metrics_table",
-        "title": "주요 지표" if intent == "portfolio_diagnosis" else "데이터 요약",
+        "title": title,
         "icon": "📊",
         "content": {
             "headers": display_headers,
             "rows": display_rows,
         }
-    }
-    return [section]
+    })
+
+    return sections
 
 
 # ============================================================

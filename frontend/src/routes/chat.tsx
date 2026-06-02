@@ -475,6 +475,7 @@ function StructuredCard({ data, customerName }: { data: StructuredResponse; cust
                 <span className="text-[12px] font-bold text-gray-700">{sec.title}</span>
               </div>
               {sec.section_type === "metrics_table" && <SectionMetricsTable content={sec.content} />}
+              {sec.section_type === "chart_data" && <SectionChart content={sec.content} />}
               {sec.section_type === "alert_list" && <SectionAlertList content={sec.content} />}
               {sec.section_type === "text_insight" && <SectionTextInsight content={sec.content} />}
               {sec.section_type === "action_list" && <SectionActionList content={sec.content} />}
