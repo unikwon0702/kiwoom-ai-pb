@@ -13,8 +13,8 @@ from backend.db_client import DBClient
 
 logger = logging.getLogger("response_builder")
 
-# 전체 구조화 overhead 제한 (2초)
-MAX_OVERHEAD_SEC = 2.0
+# 전체 구조화 overhead 제한 (4초 - multi-table 조회 시간 확보)
+MAX_OVERHEAD_SEC = 4.0
 # Intent confidence 최소 기준
 MIN_CONFIDENCE = 0.4
 
@@ -26,9 +26,11 @@ def build_structured_response(
     segment: str | None,
     db: DBClient,
     question: str = "",
+    pre_fetched_extra: dict | None = None,
 ) -> dict | None:
     """
     Genie 응답을 받아 구조화 JSON을 생성.
+    pre_fetched_extra: app.py에서 병렬 조회된 보강 데이터 (None이면 내부에서 조회)
     
     Returns:
         구조화 JSON dict, 또는 None (fallback 신호).
@@ -63,21 +65,40 @@ def build_structured_response(
                 row_dict = {columns[i]: rows[0][i] for i in range(len(columns))}
         sections = _build_sections_from_genie(intent, table_data)
 
-        # 3. 보강 데이터 조회 (timeout 내에서) — 조회형은 보강 안 함
+        # 3. 보강 데이터: pre_fetched 있으면 재조회 skip, 없으면 직접 조회
+        extra = None
         if not is_lookup_intent:
-            elapsed = time.time() - start
-            remaining = MAX_OVERHEAD_SEC - elapsed
-            if remaining > 0.3:
-                extra = fetch_supplemental(intent, customer_id, db)
-                if extra:
-                    extra_sections = _build_sections_from_cache(intent, extra)
-                    sections.extend(extra_sections)
+            extra = pre_fetched_extra
+            if extra is None:
+                elapsed = time.time() - start
+                remaining = MAX_OVERHEAD_SEC - elapsed
+                if remaining > 0.3:
+                    extra = fetch_supplemental(intent, customer_id, db)
+            if extra:
+                extra_sections = _build_sections_from_cache(intent, extra)
+                sections.extend(extra_sections)
+
+        # 3-b. Genie timeout 시 row_dict를 보강 데이터(diagnosis)에서 복원
+        if row_dict is None and extra and extra.get("diagnosis"):
+            row_dict = extra["diagnosis"][0]
 
         # 4. 빈 sections 이면 fallback
         if not sections:
             return None
 
-        # 5. JSON 조립
+        # 5. 액션 추출 후 sections에서 action_list 제거 (중복 렌더링 방지)
+        actions = [] if is_lookup_intent else _extract_actions(sections)
+        if actions:
+            sections = [s for s in sections if s.get("section_type") != "action_list"]
+
+        # 6. Status 판정 먼저 (요약과의 일관성 검증용)
+        status = _infer_status(intent, sections, row_dict)
+
+        # 7. Summary 생성 + 일관성 검증
+        raw_summary = _truncate_summary(genie_result.get("answer", ""), segment, intent)
+        summary = _ensure_summary_consistency(raw_summary, status, row_dict, customer_name, segment, intent)
+
+        # 8. JSON 조립
         structured = {
             "intent": intent,
             "intent_confidence": intent_result["confidence"],
@@ -91,11 +112,10 @@ def build_structured_response(
                 "data_quality": "sufficient" if len(sections) >= 2 else "partial",
             },
             "headline": _build_headline(intent, customer_name, segment),
-            "summary": genie_result.get("answer", ""),  # Genie 원문 그대로
-            "overall_status": _infer_status(intent, sections, row_dict),
+            "summary": summary,
+            "overall_status": status,
             "sections": sections,
-            # 조회형 intent는 액션 아이템 생성 안 함
-            "recommended_actions": [] if is_lookup_intent else _extract_actions(sections),
+            "recommended_actions": actions,
             "disclaimer": _get_disclaimer(segment) if not is_lookup_intent else "",
         }
 
@@ -667,56 +687,93 @@ def _build_multi_row_sections(intent: str, columns: list, rows: list) -> list:
 # ============================================================
 
 def _build_sections_from_cache(intent: str, extra: dict) -> list:
-    """app_cache 조회 결과를 intent별 sections으로 변환."""
-    table = extra.get("table", "")
-    rows = extra.get("rows", [])
-    if not rows:
+    """
+    Multi-source 보강 데이터를 intent별 풍부한 sections으로 변환.
+    extra: { "diagnosis": [...], "signals": [...], "insight_cards": [...], "rebalancing": [...] }
+    """
+    if not extra:
         return []
 
     sections = []
 
-    if table == "app_cache_portfolio_summary" and rows:
-        row = rows[0]
-        # 포트폴리오 요약 지표를 text_insight로
-        summary_parts = []
-        if row.get("portfolio_risk_level"):
-            summary_parts.append(f"포트폴리오 위험등급: {row['portfolio_risk_level']}")
-        if row.get("total_holding_count"):
-            summary_parts.append(f"보유 종목 수: {row['total_holding_count']}개")
-        if row.get("concentration_level"):
-            summary_parts.append(f"집중도: {row['concentration_level']}")
-        if row.get("diversification_score"):
-            summary_parts.append(f"분산 점수: {row['diversification_score']}")
+    # --- 1. 자산 배분 도넛 차트 (diagnosis 데이터) ---
+    diagnosis_rows = extra.get("diagnosis", [])
+    if diagnosis_rows:
+        row = diagnosis_rows[0]
+        chart_data = []
+        for field, label in [("domestic_stock_ratio", "국내주식"), ("foreign_stock_ratio", "해외주식"),
+                             ("etf_ratio", "ETF"), ("fund_ratio", "펀드"),
+                             ("bond_ratio", "채권"), ("derivative_ratio", "파생결합증권")]:
+            val = row.get(field)
+            if val is not None:
+                try:
+                    num = float(val)
+                    if num > 0:
+                        chart_data.append({"name": label, "value": round(num * 100, 1)})
+                except (ValueError, TypeError):
+                    pass
+        if chart_data:
+            total = sum(d["value"] for d in chart_data)
+            if total < 99:
+                chart_data.append({"name": "기타", "value": round(100 - total, 1)})
+            sections.append({"section_type": "chart_data", "title": "자산 배분 구성", "icon": "🥧",
+                             "content": {"chart_type": "donut", "data": chart_data}})
 
-        if summary_parts:
-            sections.append({
-                "section_type": "text_insight",
-                "title": "포트폴리오 상태",
-                "icon": "🧨",
-                "content": {
-                    "text": " / ".join(summary_parts),
-                    "highlights": [],
-                }
-            })
-
-    elif table == "app_cache_holding_signals" and rows:
-        # 신호 목록을 alert_list로
+    # --- 2. 보유종목 신호 ---
+    signal_rows = extra.get("signals", [])
+    if signal_rows:
         items = []
-        for r in rows[:5]:
-            level = "warning" if r.get("signal_category") == "리스크" else "caution"
-            items.append({
-                "level": level,
-                "title": f"{r.get('asset_name', '')} - {r.get('signal_name', '')}",
-                "detail": r.get("interpretation", ""),
-                "date": r.get("date", ""),
-            })
+        for r in signal_rows[:7]:
+            level = "warning" if r.get("risk_notice_required") else "caution"
+            items.append({"level": level,
+                          "title": f"{r.get('asset_name', '')} — {r.get('signal_name', '')}",
+                          "detail": r.get("signal_interpretation", ""), "date": ""})
         if items:
-            sections.append({
-                "section_type": "alert_list",
-                "title": "보유종목 신호",
-                "icon": "⚠️",
-                "content": {"items": items}
-            })
+            sections.append({"section_type": "alert_list", "title": "보유종목 신호", "icon": "📡",
+                             "content": {"items": items}})
+
+    # --- 3. 알림 카드 (액션 권고 포함) ---
+    card_rows = extra.get("insight_cards", [])
+    if card_rows:
+        items = []
+        for r in card_rows[:3]:
+            level = "warning" if r.get("impact_level") == "HIGH" else "caution"
+            # 요약 + 액션 권고를 함께 표시
+            detail_parts = []
+            summary_text = r.get("summary", "")
+            action_rec = r.get("action_recommendation", "")
+            if summary_text:
+                detail_parts.append(summary_text)
+            if action_rec:
+                detail_parts.append(f"→ {action_rec}")
+            items.append({"level": level, "title": r.get("title", ""),
+                          "detail": " | ".join(detail_parts) if detail_parts else "",
+                          "date": str(r.get("published_at", ""))[:10]})
+        if items:
+            sections.append({"section_type": "alert_list", "title": "알림 후보", "icon": "⚠️",
+                             "content": {"items": items}})
+
+    # --- 4. 액션 아이템 ---
+    rebal_rows = extra.get("rebalancing", [])
+    if rebal_rows:
+        row = rebal_rows[0]
+        action_items = []
+        s = row.get("rebalance_action_summary", "")
+        if s:
+            action_items.append({"priority": 1, "action": s,
+                                 "reason": f"긴급도: {row.get('rebalance_urgency','MEDIUM')}",
+                                 "urgency": (row.get("rebalance_urgency") or "medium").lower()})
+        lc = row.get("loss_cut_candidates", "")
+        if lc and str(lc) != "None":
+            action_items.append({"priority": 2, "action": f"손절 검토: {lc}",
+                                 "reason": "수익률 -15% 이하", "urgency": "high"})
+        ow = row.get("overweight_assets", "")
+        if ow and str(ow) != "None":
+            action_items.append({"priority": 3, "action": f"비중 축소: {ow}",
+                                 "reason": "25% 이상 집중", "urgency": "medium"})
+        if action_items:
+            sections.append({"section_type": "action_list", "title": "다음 액션 제안", "icon": "💡",
+                             "content": {"items": action_items}})
 
     return sections
 
@@ -724,6 +781,152 @@ def _build_sections_from_cache(intent: str, extra: dict) -> list:
 # ============================================================
 # 보조 함수
 # ============================================================
+
+import re as _re
+
+
+# Intent별 timeout 시 템플릿 summary
+_TIMEOUT_SUMMARIES = {
+    "portfolio_diagnosis": {
+        "SEG01": "포트폴리오 종합 진단 결과를 아래에 정리해드렸어요.",
+        "SEG02": "진단 결과 요약.",
+        "SEG03": "포트폴리오 종합 진단 결과입니다.",
+        "SEG04": "진단 결과.",
+    },
+    "risk_alert": {
+        "SEG01": "현재 위험 신호를 정리해드릴게요.",
+        "SEG02": "위험 신호 요약.",
+        "SEG03": "리스크 신호 점검 결과입니다.",
+        "SEG04": "위험 신호.",
+    },
+    "rebalancing_recommendation": {
+        "SEG01": "리밸런싱 추천 내용을 아래에 정리해드렸어요.",
+        "SEG02": "리밸런싱 요약.",
+        "SEG03": "리밸런싱 분석 결과입니다.",
+        "SEG04": "리밸런싱.",
+    },
+    "holding_risk_check": {
+        "SEG01": "보유 종목 위험도를 점검해드렸어요.",
+        "SEG02": "종목 위험도 점검.",
+        "SEG03": "보유 종목별 위험도 점검 결과입니다.",
+        "SEG04": "위험도 점검.",
+    },
+}
+
+
+def _truncate_summary(text: str, segment: str | None = None, intent: str = "") -> str:
+    """
+    Genie 답변을 summary용으로 축약.
+    Genie timeout/실패 시 템플릿 summary 생성.
+    """
+    # Genie timeout/실패 감지 → 템플릿 사용
+    if not text or "시간 초과" in text or "응답 생성 실패" in text:
+        templates = _TIMEOUT_SUMMARIES.get(intent, {})
+        fallback = templates.get(segment) or templates.get("SEG01", "")
+        return fallback or "분석 결과를 아래에 정리해드렸습니다."
+
+    # 세그먼트별 최대 문장 수
+    max_sentences = 1 if segment in ("SEG02", "SEG04") else 2
+
+    # 한국어 문장 끝 패턴 (요, 죠, 다, . 뒤 공백)
+    sentences = _re.split(r'(?<=[.요죠다])\s+', text.strip())
+    if len(sentences) <= max_sentences:
+        return text.strip()
+
+    truncated = " ".join(sentences[:max_sentences])
+    # 마지막 문자가 문장부호가 아니면 추가
+    if not truncated.endswith((".", "요", "죠", "다")):
+        truncated += "."
+
+    return truncated
+
+
+# 위험 상태인데 안심 표현이 나오는 모순을 방지
+_REASSURING_PATTERNS = [
+    "안심", "걸정 안", "걸정하지", "괜찮", "양호한 편", "양호합니다",
+    "좋은 성과", "긍정적인 성과", "잘 분산", "잘 구성",
+    "만족스러", "무난", "좋은 편", "안정적",
+]
+
+
+def _ensure_summary_consistency(
+    summary: str, status: dict, row_dict: dict | None,
+    customer_name: str | None, segment: str | None, intent: str
+) -> str:
+    """
+    overall_status와 summary가 모순되지 않도록 검증.
+    예: status=위험인데 summary가 "안심하셔도 돼요" → 데이터 기반 summary로 교체.
+    """
+    if not summary:
+        return summary
+
+    level = status.get("level", "")
+
+    # warning/critical 상태인데 안심 표현이 있으면 → 교체
+    if level in ("warning", "critical"):
+        has_reassuring = any(p in summary for p in _REASSURING_PATTERNS)
+        if has_reassuring:
+            return _generate_data_driven_summary(status, row_dict, customer_name, segment, intent)
+
+    # caution 상태에서도 "안심" 같은 강한 안전 표현은 제거
+    if level == "caution" and summary:
+        for p in ["안심하셔도 돼요", "걸정 안 하셔도 돼요", "걸정하지 않으셔도 돼요"]:
+            summary = summary.replace(p, "점검이 필요해 보여요")
+
+    return summary
+
+
+def _generate_data_driven_summary(
+    status: dict, row_dict: dict | None,
+    customer_name: str | None, segment: str | None, intent: str
+) -> str:
+    """
+    Status와 일관된 summary를 실제 데이터에서 생성.
+    """
+    name = customer_name or ""
+    reason = status.get("reason", "")
+
+    # row_dict에서 핵심 수치 추출
+    risk_level = ""
+    avg_return = ""
+    loss_count = ""
+    if row_dict:
+        rl = row_dict.get("portfolio_risk_level", "")
+        if rl:
+            risk_level = f"위험등급 {rl}"
+        ar = row_dict.get("avg_return")
+        if ar is not None:
+            try:
+                avg_return = f"평균 수익률 {float(ar)*100:.1f}%"
+            except (ValueError, TypeError):
+                pass
+        lc = row_dict.get("loss_asset_count")
+        if lc is not None:
+            try:
+                loss_count = f"손실 종목 {int(float(lc))}개"
+            except (ValueError, TypeError):
+                pass
+
+    # 세그먼트별 생성
+    if segment == "SEG01":
+        parts = [f"{name}님, 현재 포트폴리오 {risk_level}으로 나타나고 있어요."]
+        if reason:
+            parts.append(f"{reason} 상황이라 조금 주의가 필요해 보여요.")
+        return " ".join(parts)
+    elif segment == "SEG02":
+        items = [risk_level, avg_return, loss_count]
+        return " / ".join(i for i in items if i) + ". 점검 필요."
+    elif segment == "SEG03":
+        parts = [f"포트폴리오 {risk_level} 상태입니다."]
+        if reason:
+            parts.append(f"주요 요인: {reason}.")
+        return " ".join(parts)
+    elif segment == "SEG04":
+        items = [risk_level, reason]
+        return " / ".join(i for i in items if i) + "."
+    else:
+        return f"{name}님 포트폴리오 {risk_level}. {reason}" if reason else f"포트폴리오 {risk_level}."
+
 
 def _format_value(v, col_name: str = "") -> str:
     """

@@ -1,7 +1,7 @@
 """
-Data Fetcher — Phase 1
-Intent별 보강 데이터를 app_cache 테이블에서 조회.
-규칙: 최대 1회 추가 SQL, timeout 1.5초 이내.
+Data Fetcher — Phase 1 (Multi-table)
+Intent별 복수 Gold 테이블을 조회하여 풍부한 section 데이터 제공.
+규칙: 전체 보강 조회 총 3초 이내, 개별 쿼리 실패 시 skip.
 """
 import logging
 import time
@@ -9,40 +9,90 @@ from backend.db_client import DBClient
 
 logger = logging.getLogger("data_fetcher")
 
-# Intent별 조회할 app_cache 테이블 매핑
-INTENT_CACHE_TABLE = {
-    "portfolio_diagnosis": "app_cache_portfolio_summary",
-    "risk_alert": "app_cache_holding_signals",
+SCHEMA = "dev.ai_pb_gold"
+
+# ============================================================
+# Intent별 조회 테이블 정의 (Phase 1: portfolio_diagnosis + risk_alert)
+# ============================================================
+
+INTENT_QUERIES = {
+    "portfolio_diagnosis": [
+        {
+            "key": "diagnosis",
+            "sql": f"SELECT * FROM {SCHEMA}.gd_serving_portfolio_diagnosis WHERE customer_id = '{{cid}}' LIMIT 1",
+        },
+        {
+            "key": "signals",
+            "sql": f"SELECT asset_name, signal_name, signal_category, signal_interpretation, risk_notice_required FROM {SCHEMA}.gd_customer_portfolio_signal WHERE customer_id = '{{cid}}' LIMIT 10",
+        },
+        {
+            "key": "insight_cards",
+            "sql": f"SELECT title, summary, impact_level, published_at, action_recommendation FROM {SCHEMA}.gd_pb_insight_card WHERE customer_id = '{{cid}}' ORDER BY published_at DESC LIMIT 5",
+        },
+        {
+            "key": "rebalancing",
+            "sql": f"SELECT rebalance_needed, rebalance_urgency, rebalance_action_summary, overweight_assets, loss_cut_candidates FROM {SCHEMA}.gd_serving_rebalancing_action WHERE customer_id = '{{cid}}' LIMIT 1",
+        },
+    ],
+    "risk_alert": [
+        {
+            "key": "signals",
+            "sql": f"SELECT asset_name, signal_name, signal_category, signal_interpretation, risk_notice_required, valuation_amount, holding_weight FROM {SCHEMA}.gd_customer_portfolio_signal WHERE customer_id = '{{cid}}' LIMIT 15",
+        },
+        {
+            "key": "insight_cards",
+            "sql": f"SELECT title, summary, impact_level, published_at, action_recommendation FROM {SCHEMA}.gd_pb_insight_card WHERE customer_id = '{{cid}}' ORDER BY published_at DESC LIMIT 5",
+        },
+    ],
+    "holding_risk_check": [
+        {
+            "key": "signals",
+            "sql": f"SELECT asset_name, signal_name, signal_category, signal_interpretation, risk_notice_required FROM {SCHEMA}.gd_customer_portfolio_signal WHERE customer_id = '{{cid}}' AND risk_notice_required = true LIMIT 10",
+        },
+    ],
+    "rebalancing_recommendation": [
+        {
+            "key": "rebalancing",
+            "sql": f"SELECT * FROM {SCHEMA}.gd_serving_rebalancing_action WHERE customer_id = '{{cid}}' LIMIT 1",
+        },
+    ],
 }
 
 
 def fetch_supplemental(intent: str, customer_id: str, db: DBClient) -> dict | None:
     """
-    Intent에 필요한 보강 데이터를 app_cache에서 조회.
+    Intent에 필요한 보강 데이터를 Gold 테이블에서 복수 조회.
     
     Returns:
-        dict with raw data rows, or None if failed/timeout/unnecessary.
+        dict: { "diagnosis": [...rows], "signals": [...rows], ... }
+        각 key는 조회 결과 (list of dict). 실패 시 해당 key 없음.
     """
-    cache_table = INTENT_CACHE_TABLE.get(intent)
-    if not cache_table:
+    queries = INTENT_QUERIES.get(intent)
+    if not queries:
         return None
 
     start = time.time()
-    try:
-        schema = db.schema
-        sql = f"SELECT * FROM {schema}.{cache_table} WHERE customer_id = '{customer_id}' LIMIT 20"
-        logger.info(f"[DATA_FETCH] {cache_table} for {customer_id}")
-        rows = db._execute(sql)
-        elapsed = time.time() - start
-        logger.info(f"[DATA_FETCH] {cache_table}: {len(rows)} rows in {elapsed:.2f}s")
+    results = {}
 
-        # Timeout 검증 (1.5초 초과 시 경고만, 결과는 사용)
-        if elapsed > 1.5:
-            logger.warning(f"[DATA_FETCH] Slow query: {elapsed:.2f}s > 1.5s threshold")
+    for q in queries:
+        key = q["key"]
+        sql = q["sql"].replace("{cid}", customer_id)
 
-        return {"table": cache_table, "rows": rows}
+        try:
+            elapsed_so_far = time.time() - start
+            if elapsed_so_far > 3.0:
+                logger.warning(f"[DATA_FETCH] Total timeout reached ({elapsed_so_far:.2f}s), skipping {key}")
+                break
 
-    except Exception as e:
-        elapsed = time.time() - start
-        logger.error(f"[DATA_FETCH] Failed ({elapsed:.2f}s): {e}")
-        return None
+            rows = db._execute(sql)
+            results[key] = rows
+            logger.info(f"[DATA_FETCH] {key}: {len(rows)} rows")
+
+        except Exception as e:
+            logger.warning(f"[DATA_FETCH] {key} failed: {e}")
+            continue  # 개별 실패는 skip
+
+    elapsed = time.time() - start
+    logger.info(f"[DATA_FETCH] Total: {len(results)} sources in {elapsed:.2f}s")
+
+    return results if results else None

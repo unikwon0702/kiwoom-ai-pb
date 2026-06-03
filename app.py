@@ -139,23 +139,48 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
-    """AI PB 챗봇 - Genie Space 대화 (고객 세그먼트별 맞춤 응답 + 구조화 카드 UI)"""
+    """AI PB 챗봇 - Genie + 보강데이터 병렬 조회 → 구조화 카드 UI"""
     if not req.customer_id:
         raise HTTPException(400, "customer_id는 필수입니다. 고객을 먼저 선택해주세요.")
     import logging
+    from concurrent.futures import ThreadPoolExecutor
+    from backend.intent_classifier import classify
+    from backend.data_fetcher import fetch_supplemental
+
     logger = logging.getLogger("app")
     logger.info(f"[CHAT_API] customer_id={req.customer_id}, segment={req.segment}, question={req.question[:50]}")
 
-    # Genie 호출 (기존 로직)
-    genie_result = genie.ask(
-        question=req.question,
-        conversation_id=req.conversation_id,
-        customer_id=req.customer_id,
-        customer_name=req.customer_name,
-        segment=req.segment,
-    )
+    # 1. Early intent classification (질문만으로 즉시 분류, ~0ms)
+    early_intent = classify(question=req.question, sql=None, answer=None)
+    intent_name = early_intent["intent"]
+    is_lookup = intent_name in ("portfolio_allocation_summary", "holding_loss_detail", "holding_profit_detail")
 
-    # 구조화 응답 시도 (실패 시 None → 기존 방식 유지)
+    # 2. 병렬 실행: Genie 호출 + 보강 데이터 조회 동시 진행
+    pre_fetched_extra = None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        # Thread A: Genie Space 호출 (60초 timeout)
+        genie_future = executor.submit(
+            genie.ask, req.question, req.conversation_id,
+            req.customer_id, req.customer_name, req.segment
+        )
+
+        # Thread B: 보강 데이터 조회 (조회형은 skip, fallback도 skip)
+        supplemental_future = None
+        if not is_lookup and intent_name != "fallback" and early_intent["confidence"] >= 0.4:
+            supplemental_future = executor.submit(
+                fetch_supplemental, intent_name, req.customer_id, db
+            )
+
+        # 결과 수집
+        genie_result = genie_future.result()
+        if supplemental_future:
+            try:
+                pre_fetched_extra = supplemental_future.result()
+            except Exception as e:
+                logger.warning(f"[CHAT_API] Supplemental fetch failed: {e}")
+
+    # 3. 구조화 응답 조립 (pre-fetched 데이터 전달 → 재조회 방지)
     try:
         structured = build_structured_response(
             genie_result=genie_result,
@@ -164,6 +189,7 @@ def chat(req: ChatRequest):
             segment=req.segment,
             db=db,
             question=req.question,
+            pre_fetched_extra=pre_fetched_extra,
         )
         if structured:
             genie_result["structured"] = structured
