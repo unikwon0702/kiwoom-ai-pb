@@ -328,10 +328,148 @@ def chat_v2(req: ChatRequest):
 
     if markdown_response:
         logger.info(f"[V2] SUCCESS in {elapsed:.2f}s, {len(markdown_response)} chars")
+
+        # Intent별 차트 데이터 생성
+        chart_sections = []
+        diag = data.get("diagnosis", [])
+        row = diag[0] if diag and isinstance(diag, list) and len(diag) > 0 else {}
+
+        if intent == "portfolio_diagnosis":
+            # 1) 도넛: 자산 배분
+            ratio_map = {
+                "국내주식": row.get("domestic_stock_ratio"),
+                "해외주식": row.get("foreign_stock_ratio"),
+                "ETF": row.get("etf_ratio"),
+                "펀드": row.get("fund_ratio"),
+                "채권": row.get("bond_ratio"),
+                "파생상품": row.get("derivative_ratio"),
+            }
+            chart_items = [{"name": k, "value": round(float(v) * 100, 1)} for k, v in ratio_map.items() if v and float(v) > 0]
+            if chart_items:
+                chart_sections.append({
+                    "section_type": "chart_data",
+                    "title": "자산 배분 현황",
+                    "icon": "🥧",
+                    "content": {"chart_type": "donut", "data": chart_items}
+                })
+
+            # 2) 바: 위험 신호 분포
+            signals = data.get("signals", [])
+            if signals:
+                from collections import Counter
+                cats = Counter(s.get("signal_category", "기타") for s in signals if s.get("risk_notice_required"))
+                if cats:
+                    bar_data = [{"name": k, "value": v} for k, v in cats.most_common(5)]
+                    chart_sections.append({
+                        "section_type": "chart_data",
+                        "title": "위험 신호 분포",
+                        "icon": "⚠️",
+                        "content": {"chart_type": "bar", "data": bar_data, "unit": "건"}
+                    })
+
+        elif intent == "rebalancing_recommendation":
+            # 비교 차트: 현재 vs 목표
+            if row:
+                comparison = []
+                stock = row.get("domestic_stock_ratio")
+                deriv = row.get("derivative_ratio")
+                etf = row.get("etf_ratio")
+                if stock is not None:
+                    comparison.append({"name": "주식", "current": round(float(stock) * 100, 1), "target": 75.0})
+                if etf is not None:
+                    comparison.append({"name": "ETF", "current": round(float(etf) * 100, 1), "target": 15.0})
+                if deriv is not None:
+                    comparison.append({"name": "파생상품", "current": round(float(deriv) * 100, 1), "target": 10.0})
+                if comparison:
+                    chart_sections.append({
+                        "section_type": "chart_data",
+                        "title": "현재 vs 목표 비중",
+                        "icon": "🎯",
+                        "content": {"chart_type": "comparison", "data": comparison}
+                    })
+
+        elif intent in ("risk_alert", "holding_risk_check"):
+            # 바: 종목별 위험 신호 수
+            signals = data.get("signals", [])
+            if signals:
+                from collections import Counter
+                asset_counts = Counter(s.get("asset_name", "?") for s in signals if s.get("risk_notice_required"))
+                if asset_counts:
+                    bar_data = [{"name": k[:8], "value": v} for k, v in asset_counts.most_common(6)]
+                    chart_sections.append({
+                        "section_type": "chart_data",
+                        "title": "종목별 위험 신호",
+                        "icon": "📊",
+                        "content": {"chart_type": "bar", "data": bar_data, "unit": "건"}
+                    })
+
+        elif intent == "market_context_analysis":
+            # 도넛: 자산 배분 (시장 영향 맥락으로)
+            ratio_map = {
+                "주식": row.get("domestic_stock_ratio"),
+                "ETF": row.get("etf_ratio"),
+                "파생상품": row.get("derivative_ratio"),
+            }
+            chart_items = [{"name": k, "value": round(float(v) * 100, 1)} for k, v in ratio_map.items() if v and float(v) > 0]
+            if chart_items:
+                chart_sections.append({
+                    "section_type": "chart_data",
+                    "title": "시장 영향 받는 자산 비중",
+                    "icon": "🌐",
+                    "content": {"chart_type": "donut", "data": chart_items}
+                })
+
+        # Intent별 추천 질문
+        _followups = {
+            "portfolio_diagnosis": ["리밸런싱 어떻게 해야 돼?", "위험 종목만 따로 보여줘", "자산 배분 비중 알려줘"],
+            "risk_alert": ["가장 위험한 종목은 뭐야?", "손절 기준 알려줘", "포트폴리오 전체 진단해줘"],
+            "holding_risk_check": ["리스크 높은 종목 정리해줘", "포트폴리오 진단해줘", "리밸런싱 추천해줘"],
+            "rebalancing_recommendation": ["지금 바로 실행할 건 뭐야?", "포트폴리오 진단해줘", "위험 신호 알려줘"],
+            "portfolio_allocation_summary": ["비중 조정 필요한 거 있어?", "포트폴리오 진단해줘", "위험 종목 알려줘"],
+            "holding_loss_detail": ["손절해야 할 종목 있어?", "전체 포트폴리오 진단해줘", "리밸런싱 추천해줘"],
+            "holding_profit_detail": ["수익 실현할 종목 있어?", "포트폴리오 진단해줘", "리밸런싱 필요해?"],
+        }
+
+        # 마크다운에 차트 마커 삽입 (첫 번째 테이블 뒤에 차트 삽입)
+        final_answer = markdown_response
+        if chart_sections:
+            # 첫 번째 테이블 끝 이후에 첫 차트 삽입
+            lines = final_answer.split("\n")
+            table_end_idx = -1
+            for i, line in enumerate(lines):
+                if line.startswith("|") and i > 0 and not lines[i-1].startswith("|") and table_end_idx == -1:
+                    pass
+                elif not line.startswith("|") and i > 0 and lines[i-1].startswith("|"):
+                    table_end_idx = i
+                    break
+
+            if table_end_idx > 0 and len(chart_sections) >= 1:
+                # 첫 테이블 뒤에 첫 차트
+                lines.insert(table_end_idx, "\n{{CHART:0}}\n")
+                # 두 번째 차트는 텍스트 중간쯤
+                if len(chart_sections) >= 2:
+                    # 전체의 70% 지점에 삽입
+                    mid_idx = int(len(lines) * 0.7)
+                    lines.insert(mid_idx, "\n{{CHART:1}}\n")
+                final_answer = "\n".join(lines)
+            else:
+                # 테이블 못 찾으면 마지막에 차트 마커 추가
+                for i in range(len(chart_sections)):
+                    final_answer += f"\n\n{{{{CHART:{i}}}}}\n"
+
         return {
             "status": "success",
-            "answer": markdown_response,
-            "structured": None,
+            "answer": final_answer,
+            "structured": {
+                "intent": intent,
+                "headline": "",
+                "summary": "",
+                "overall_status": {},
+                "sections": chart_sections,
+                "recommended_actions": [],
+                "disclaimer": "",
+            } if chart_sections else None,
+            "suggested_questions": _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]),
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed},
         }
     else:

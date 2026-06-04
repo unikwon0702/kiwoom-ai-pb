@@ -8,7 +8,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   PieChart, Pie, Cell,
-  Tooltip, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 
 type ChatSearch = { autoPromptType?: string };
@@ -581,28 +582,70 @@ function SectionTextInsight({ content }: { content: any }) {
 
 function SectionChart({ content }: { content: any }) {
   const data = content?.data;
+  const chartType = content?.chart_type || "donut";
   if (!data?.length) return null;
-  return (
-    <div className="flex items-center justify-center py-2">
-      <ResponsiveContainer width={160} height={160}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} stroke="none">
-            {data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-          </Pie>
-          <Tooltip formatter={(v: number) => `${v}%`} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="flex flex-col gap-1 ml-2">
-        {data.map((d: any, i: number) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <span className="size-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-            <span className="text-[11px] text-gray-600">{d.name}</span>
-            <span className="text-[11px] font-semibold text-gray-800 ml-auto">{d.value}%</span>
-          </div>
-        ))}
+
+  if (chartType === "donut") {
+    return (
+      <div className="flex items-center justify-center py-2">
+        <ResponsiveContainer width={160} height={160}>
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} stroke="none">
+              {data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            </Pie>
+            <Tooltip formatter={(v: number) => `${v}%`} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="flex flex-col gap-1 ml-2">
+          {data.map((d: any, i: number) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+              <span className="text-[11px] text-gray-600">{d.name}</span>
+              <span className="text-[11px] font-semibold text-gray-800 ml-auto">{d.value}%</span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (chartType === "bar") {
+    return (
+      <div className="py-2">
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} />
+            <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} unit={content?.unit || ""} />
+            <Tooltip />
+            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+              {data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  if (chartType === "stacked_bar" || chartType === "comparison") {
+    return (
+      <div className="py-2">
+        <ResponsiveContainer width="100%" height={180}>
+          <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }} layout="vertical">
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis type="number" tick={{ fontSize: 11, fill: "#6B7280" }} unit="%" />
+            <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} width={80} />
+            <Tooltip />
+            <Bar dataKey="current" name="현재" fill="#606CF2" radius={[0, 4, 4, 0]} />
+            {data[0]?.target !== undefined && <Bar dataKey="target" name="목표" fill="#10B981" radius={[0, 4, 4, 0]} />}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  // fallback: donut
+  return null;
 }
 
 function SectionActionList({ content }: { content: any }) {
@@ -635,6 +678,10 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
     return <StructuredCard data={msg.structured} customerName={customerName} />;
   }
 
+  // 인라인 차트: {{CHART:N}} 마커를 감지해서 텍스트+차트 번갈아 렌더링
+  const chartSections = isHybrid ? msg.structured?.sections?.filter((s: any) => s.section_type === "chart_data") || [] : [];
+  const hasInlineCharts = msg.text?.includes("{{CHART:");
+
   const charts = msg.tableData ? buildCharts(msg.tableData) : [];
 
   return (
@@ -653,7 +700,7 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
             {msg.description && (
               <p className="text-[12px] text-indigo-500 mb-2 italic">{msg.description}</p>
             )}
-            {msg.text && (
+            {msg.text && !hasInlineCharts && (
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
@@ -686,6 +733,41 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
                 </ReactMarkdown>
               </div>
             )}
+            {msg.text && hasInlineCharts && (
+              <div className="text-[13.5px] text-gray-700 leading-[1.7]">
+                {msg.text.split(/\{\{CHART:(\d+)\}\}/).map((segment: string, idx: number) => {
+                  if (idx % 2 === 0) {
+                    // 텍스트 세그먼트
+                    return segment.trim() ? (
+                      <ReactMarkdown key={idx} remarkPlugins={[remarkGfm]} components={{
+                        strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
+                        ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
+                        li: (props: any) => (<li className="flex items-start gap-2"><span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" /><span>{props.children}</span></li>),
+                        p: (props: any) => <p className="mb-2 last:mb-0">{props.children}</p>,
+                        table: (props: any) => (<div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100"><table className="w-full text-[12px]">{props.children}</table></div>),
+                        thead: (props: any) => <thead className="bg-gray-50">{props.children}</thead>,
+                        th: (props: any) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{props.children}</th>,
+                        td: (props: any) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{props.children}</td>,
+                      }}>{segment}</ReactMarkdown>
+                    ) : null;
+                  } else {
+                    // 차트 인덱스
+                    const chartIdx = parseInt(segment);
+                    const chartSec = chartSections[chartIdx];
+                    if (!chartSec) return null;
+                    return (
+                      <div key={`chart-${idx}`} className="my-3 rounded-xl border border-gray-100 bg-gray-50/50 p-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[13px]">{chartSec.icon}</span>
+                          <span className="text-[11px] font-bold text-gray-600">{chartSec.title}</span>
+                        </div>
+                        <SectionChart content={chartSec.content} />
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
           </div>
           {/* First chart inside main card */}
           {charts.length > 0 && (
@@ -699,8 +781,8 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
           )}
         </div>
 
-        {/* Structured chart sections (hybrid mode) */}
-        {isHybrid && msg.structured?.sections?.map((sec: any, i: number) => (
+        {/* Structured chart sections (hybrid mode - only if no inline markers) */}
+        {isHybrid && !hasInlineCharts && msg.structured?.sections?.map((sec: any, i: number) => (
           sec.section_type === "chart_data" && (
             <div key={`struct-${i}`} className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
               <div className="px-4 py-3">
