@@ -102,14 +102,32 @@ class DBClient:
     # Unexpected Signals [화면1]
     # ============================================================
     def get_unexpected_signals(self, limit: int = 4) -> list[dict]:
-        """의외의 신호: importance 상위 이벤트"""
+        """의외의 신호: 모든 고객에게 새로운 투자 인사이트를 제공하는 뉴스 (중복·루틴 제외)"""
         return self._execute(f"""
+            WITH deduped AS (
+              SELECT event_id, event_title, event_type, event_subtype,
+                     related_sector, ai_investment_view,
+                     impacted_assets_json, importance_score, sort_timestamp,
+                     ROW_NUMBER() OVER (PARTITION BY event_title ORDER BY sort_timestamp DESC) as rn
+              FROM {self._t('app_cache_news_feed')}
+              WHERE event_type = '뉴스'
+                AND importance_score IS NOT NULL
+                AND ai_investment_view IS NOT NULL
+                AND impacted_assets_json IS NOT NULL
+                AND event_title NOT LIKE '%[속보]%'
+                AND event_title NOT LIKE '%마감%'
+                AND event_title NOT LIKE '%환율,%'
+                AND event_title NOT LIKE '%코스피 %'
+                AND event_title NOT LIKE '%코스닥 %'
+                AND event_title NOT LIKE '%표]%'
+                AND event_title NOT LIKE '%전일 대비%'
+                AND event_title NOT LIKE '%장중 속보%'
+            )
             SELECT event_id, event_title, event_type, event_subtype,
                    related_sector, ai_investment_view,
                    impacted_assets_json, importance_score
-            FROM {self._t('app_cache_news_feed')}
-            WHERE event_type NOT IN ('실적발표', '배당')
-              AND importance_score IS NOT NULL
+            FROM deduped
+            WHERE rn = 1
             ORDER BY importance_score DESC, sort_timestamp DESC
             LIMIT {limit}
         """)
