@@ -193,7 +193,25 @@ def compose_markdown(
 ```
 
 위 데이터와 세그먼트 스타일 가이드에 맞춰 마크다운 응답을 생성하세요.
-JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세요."""
+JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세요.
+
+마지막에 반드시 disclaimer를 추가하세요. 구조: "투자 의사결정은 본인 판단과 책임하에 진행해 주세요. ☺️ [후속 멘트]"
+
+후속 멘트는 intent별로 다르게 작성 (고정 문구 금지, 문맥에 맞게):
+- portfolio_diagnosis: "필요하시면 보유 자산별로 더 구체적으로 나눠서 진단해드릴게요."
+- rebalancing_recommendation: "구체적인 매도/매수 수량이 궁금하시면 말씀해주세요."
+- risk_alert / holding_risk_check: "특정 종목을 더 깊이 살펴보고 싶으시면 말씀해주세요."
+- market_context_analysis: "특정 이벤트가 내 자산에 미치는 영향이 궁금하시면 물어봐주세요."
+- holding_loss_detail: "손절 기준이나 대응 전략이 궁금하시면 말씀해주세요."
+- holding_profit_detail: "수익 실현 타이밍이 궁금하시면 말씀해주세요."
+- 기타: "더 궁금한 점이 있으시면 편하게 질문해주세요."
+
+세그먼트별 톤 조정:
+- SEG01: 위 형식 그대로 (따뜻하게)
+- SEG02: "본 내용은 참고용이며 투자 판단은 본인 책임입니다." (후속 멘트 생략)
+- SEG03: "본 분석은 참고 인사이트입니다. [후속 멘트 격식체로]"
+- SEG04: "참고용. 본인 판단 하에 실행." (후속 멘트 생략)
+"""
 
     # LLM 호출 (llm_client의 _call 메서드 재사용 — parse_json=False로 마크다운 반환)
     from backend.llm_client import COMPOSER_MODEL, COMPOSER_TIMEOUT

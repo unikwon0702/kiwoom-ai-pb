@@ -9,6 +9,8 @@ import remarkGfm from "remark-gfm";
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line,
+  ScatterChart, Scatter, ZAxis,
   Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 
@@ -640,6 +642,83 @@ function SectionChart({ content }: { content: any }) {
             {data[0]?.target !== undefined && <Bar dataKey="target" name="목표" fill="#10B981" radius={[0, 4, 4, 0]} />}
           </BarChart>
         </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  if (chartType === "line") {
+    return (
+      <div className="py-2">
+        <ResponsiveContainer width="100%" height={160}>
+          <LineChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#6B7280" }} />
+            <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} unit={content?.unit || ""} />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#606CF2" strokeWidth={2} dot={{ fill: "#606CF2", r: 3 }} />
+            {data[0]?.value2 !== undefined && <Line type="monotone" dataKey="value2" stroke="#10B981" strokeWidth={2} dot={{ fill: "#10B981", r: 3 }} />}
+          </LineChart>
+        </ResponsiveContainer>
+        {content?.legend && (
+          <div className="flex items-center justify-center gap-4 mt-1">
+            {content.legend.map((l: any, i: number) => (
+              <div key={i} className="flex items-center gap-1">
+                <span className="size-2 rounded-full" style={{ background: l.color || COLORS[i] }} />
+                <span className="text-[10px] text-gray-500">{l.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (chartType === "scatter") {
+    return (
+      <div className="py-2">
+        <ResponsiveContainer width="100%" height={160}>
+          <ScatterChart margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis type="number" dataKey="x" name={content?.xLabel || "X"} tick={{ fontSize: 10, fill: "#6B7280" }} unit={content?.xUnit || ""} />
+            <YAxis type="number" dataKey="y" name={content?.yLabel || "Y"} tick={{ fontSize: 10, fill: "#6B7280" }} unit={content?.yUnit || ""} />
+            <ZAxis type="number" dataKey="z" range={[40, 200]} />
+            <Tooltip cursor={{ strokeDasharray: "3 3" }} formatter={(val: number, name: string) => [val, name === "x" ? (content?.xLabel || "X") : (content?.yLabel || "Y")]} />
+            <Scatter data={data} fill="#606CF2">
+              {data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+            </Scatter>
+          </ScatterChart>
+        </ResponsiveContainer>
+        {content?.xLabel && (
+          <div className="flex items-center justify-between px-2 mt-1">
+            <span className="text-[10px] text-gray-400">{content.xLabel}</span>
+            <span className="text-[10px] text-gray-400">{content.yLabel}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (chartType === "gauge") {
+    const value = content?.value ?? data[0]?.value ?? 0;
+    const max = content?.max ?? 100;
+    const label = content?.label || "";
+    const level = content?.level || "normal";
+    const levelColors: Record<string, string> = { good: "#10B981", normal: "#3B82F6", caution: "#F59E0B", warning: "#F97316", critical: "#EF4444" };
+    const color = levelColors[level] || "#606CF2";
+    const pct = Math.min((value / max) * 100, 100);
+    return (
+      <div className="flex flex-col items-center py-3">
+        <div className="relative w-[140px] h-[70px] overflow-hidden">
+          {/* Background arc */}
+          <div className="absolute inset-0 rounded-t-full border-[12px] border-gray-100 border-b-0" />
+          {/* Filled arc */}
+          <div className="absolute inset-0 rounded-t-full border-[12px] border-b-0 origin-bottom" style={{ borderColor: color, clipPath: `polygon(0 100%, ${pct}% 100%, ${pct}% 0, 0 0)` }} />
+        </div>
+        <div className="text-center -mt-1">
+          <span className="text-[20px] font-bold" style={{ color }}>{typeof value === "number" ? value.toFixed(1) : value}</span>
+          <span className="text-[11px] text-gray-400 ml-1">{content?.unit || ""}</span>
+        </div>
+        {label && <span className="text-[11px] text-gray-500 mt-0.5">{label}</span>}
       </div>
     );
   }

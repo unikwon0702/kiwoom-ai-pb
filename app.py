@@ -353,7 +353,26 @@ def chat_v2(req: ChatRequest):
                     "content": {"chart_type": "donut", "data": chart_items}
                 })
 
-            # 2) 바: 위험 신호 분포
+            # 2) 게이지: 포트폴리오 위험도
+            risk_level = row.get("portfolio_risk_level", "")
+            risk_scores = {"높음": 80, "중간": 50, "낮음": 20}
+            risk_levels = {"높음": "warning", "중간": "caution", "낮음": "good"}
+            if risk_level in risk_scores:
+                chart_sections.append({
+                    "section_type": "chart_data",
+                    "title": "포트폴리오 위험 수준",
+                    "icon": "🎯",
+                    "content": {
+                        "chart_type": "gauge",
+                        "value": risk_scores[risk_level],
+                        "max": 100,
+                        "label": risk_level,
+                        "level": risk_levels[risk_level],
+                        "unit": "점",
+                    }
+                })
+
+            # 3) 바: 위험 신호 분포
             signals = data.get("signals", [])
             if signals:
                 from collections import Counter
@@ -388,6 +407,20 @@ def chat_v2(req: ChatRequest):
                         "content": {"chart_type": "comparison", "data": comparison}
                     })
 
+                    # 꺾은선: 자산군별 현재→목표 변화
+                    line_data = [{"name": c["name"], "value": c["current"], "value2": c["target"]} for c in comparison]
+                    chart_sections.append({
+                        "section_type": "chart_data",
+                        "title": "비중 조정 방향",
+                        "icon": "📈",
+                        "content": {
+                            "chart_type": "line",
+                            "data": line_data,
+                            "unit": "%",
+                            "legend": [{"label": "현재", "color": "#606CF2"}, {"label": "목표", "color": "#10B981"}],
+                        }
+                    })
+
         elif intent in ("risk_alert", "holding_risk_check"):
             # 바: 종목별 위험 신호 수
             signals = data.get("signals", [])
@@ -401,6 +434,31 @@ def chat_v2(req: ChatRequest):
                         "title": "종목별 위험 신호",
                         "icon": "📊",
                         "content": {"chart_type": "bar", "data": bar_data, "unit": "건"}
+                    })
+
+            # 산점도: 종목별 비중 vs 신호 수
+            if signals and row:
+                scatter_data = []
+                for asset, cnt in asset_counts.most_common(8):
+                    # Try to find weight for this asset
+                    weight_info = [s for s in signals if s.get("asset_name") == asset]
+                    weight = 10  # default
+                    if weight_info and weight_info[0].get("holding_weight"):
+                        weight = round(float(weight_info[0]["holding_weight"]) * 100, 1)
+                    scatter_data.append({"x": weight, "y": cnt, "name": asset[:6], "z": cnt * 20})
+                if scatter_data:
+                    chart_sections.append({
+                        "section_type": "chart_data",
+                        "title": "비중 vs 위험 신호",
+                        "icon": "🔬",
+                        "content": {
+                            "chart_type": "scatter",
+                            "data": scatter_data,
+                            "xLabel": "보유 비중(%)",
+                            "yLabel": "위험 신호(건)",
+                            "xUnit": "%",
+                            "yUnit": "건",
+                        }
                     })
 
         elif intent == "market_context_analysis":
