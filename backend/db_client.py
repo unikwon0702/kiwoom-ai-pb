@@ -135,23 +135,41 @@ class DBClient:
     # ============================================================
     # Market Events [화면3]
     # ============================================================
-    def get_market_events(self, limit: int = 5) -> list[dict]:
-        """이벤트·시황: 시장 전반 (의외의 신호 상위 event_id 제외)"""
+    def get_market_events(self, customer_id: str = "CUST0010", limit: int = 5) -> list[dict]:
+        """이벤트·시황: 고객 보유종목 관련 뉴스 (중복·루틴 제외, sector 추출)"""
         return self._execute(f"""
+            WITH customer_assets AS (
+              SELECT DISTINCT asset_name
+              FROM {self._t('app_cache_holding_signals')}
+              WHERE customer_id = '{customer_id}'
+            ),
+            matching_news AS (
+              SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
+                     COALESCE(n.related_sector, GET_JSON_OBJECT(n.impacted_assets_json, '$[0].sector')) as related_sector,
+                     n.related_theme, n.ai_investment_view,
+                     n.sentiment_score, n.impacted_asset_count,
+                     n.impacted_assets_json, n.published_at, n.sort_timestamp,
+                     GET_JSON_OBJECT(n.impacted_assets_json, '$[0].asset_name') as primary_asset,
+                     GET_JSON_OBJECT(n.impacted_assets_json, '$[0].impact_direction') as impact_direction,
+                     ROW_NUMBER() OVER (PARTITION BY n.event_title ORDER BY n.sort_timestamp DESC) as rn
+              FROM {self._t('app_cache_news_feed')} n
+              INNER JOIN customer_assets ca
+                ON n.impacted_assets_json LIKE CONCAT('%', ca.asset_name, '%')
+              WHERE n.event_type = '뉴스'
+                AND n.ai_investment_view IS NOT NULL
+                AND n.impacted_assets_json IS NOT NULL
+                AND n.event_title NOT LIKE '%[속보]%'
+                AND n.event_title NOT LIKE '%마감%'
+                AND n.event_title NOT LIKE '%전일 대비%'
+                AND n.event_title NOT LIKE '%표]%'
+            )
             SELECT event_id, event_title, event_type, event_subtype,
                    related_sector, related_theme, ai_investment_view,
                    sentiment_score, impacted_asset_count,
-                   impacted_assets_json, published_at
-            FROM {self._t('app_cache_news_feed')}
-            WHERE ai_investment_view IS NOT NULL
-              AND impacted_assets_json IS NOT NULL
-              AND event_id NOT IN (
-                  SELECT event_id FROM {self._t('app_cache_news_feed')}
-                  WHERE event_type NOT IN ('실적발표', '배당')
-                    AND importance_score IS NOT NULL
-                  ORDER BY importance_score DESC, sort_timestamp DESC
-                  LIMIT 4
-              )
+                   impacted_assets_json, published_at,
+                   primary_asset, impact_direction
+            FROM matching_news
+            WHERE rn = 1
             ORDER BY sort_timestamp DESC
             LIMIT {limit}
         """)

@@ -146,7 +146,7 @@ function NotificationsPage() {
   // Fetch data from API
   const { customer } = useCustomer();
   const { data: holdingsRaw } = useHoldingSignals(customer.id, 10);
-  const { data: marketsRaw } = useMarketEvents(10);
+  const { data: marketsRaw } = useMarketEvents(customer.id, 10);
   const { data: schedulesRaw } = useSchedules(10);
 
   const holdingsItems: Holding[] = (holdingsRaw?.holdings ?? []).map((h: any, i: number) => ({

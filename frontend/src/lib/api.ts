@@ -41,8 +41,8 @@ export const api = {
   getUnexpectedSignals: (limit = 4) =>
     request<{ signals: any[] }>(`/unexpected-signals?limit=${limit}`),
 
-  getMarketEvents: (limit = 5) =>
-    request<{ events: any[] }>(`/market-events?limit=${limit}`),
+  getMarketEvents: (customerId = 'CUST0010', limit = 5) =>
+    request<{ events: any[] }>(`/market-events?customer_id=${customerId}&limit=${limit}`),
 
   getMarketOverview: (segment?: string) => {
     const q = segment ? `?segment=${segment}` : '';

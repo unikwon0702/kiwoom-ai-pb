@@ -49,7 +49,7 @@ type Schedule = {
 
 function useCurrentSituationData(customerId: string): { holdings: Holding[]; markets: Market[]; schedules: Schedule[]; loading: boolean } {
   const { data: holdingsData, loading: hLoading } = useHoldingSignals(customerId, 5);
-  const { data: marketsData, loading: mLoading } = useMarketEvents(3);
+  const { data: marketsData, loading: mLoading } = useMarketEvents(customerId, 3);
   const { data: schedulesData, loading: sLoading } = useSchedules(3);
 
   const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => ({
@@ -60,14 +60,18 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
     subDesc: h.interpretation ?? '',
   }));
 
-  const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => ({
-    eventId: e.event_id ?? '',
-    title: e.event_title ?? '',
-    time: getDisplayTime(e.published_at, i + 5),
-    desc: e.ai_investment_view ?? e.related_sector ?? '',
-    hashtags: [e.related_sector, e.event_type].filter(Boolean) as string[],
-    relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
-  }));
+  const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => {
+    const rawDesc = e.ai_investment_view ?? '';
+    const desc = rawDesc.length > 40 ? rawDesc.slice(0, 40) + '...' : rawDesc;
+    return {
+      eventId: e.event_id ?? '',
+      title: e.event_title ?? '',
+      time: getDisplayTime(e.published_at, i + 5),
+      desc,
+      hashtags: [e.related_sector, e.primary_asset].filter(Boolean) as string[],
+      relevance: e.impact_direction === '긍정' ? '보유 종목에 긍정적 영향이 예상돼요' : e.impact_direction === '부정' ? '보유 종목에 주의가 필요해요' : '보유·관심 자산과 관련이 높아요',
+    };
+  });
 
   const schedules: Schedule[] = (schedulesData?.schedules ?? []).map((s: any, i: number) => ({
     eventId: s.event_id ?? '',

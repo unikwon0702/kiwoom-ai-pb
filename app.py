@@ -53,9 +53,12 @@ def get_unexpected_signals(limit: int = Query(default=4, le=10)):
 
 
 @app.get("/api/market-events")
-def get_market_events(limit: int = Query(default=5, le=20)):
-    """[화면3] 지금 뜨는 이벤트·시황"""
-    return {"events": db.get_market_events(limit)}
+def get_market_events(
+    customer_id: str = Query(default="CUST0010"),
+    limit: int = Query(default=5, le=20)
+):
+    """[화면3] 지금 뜨는 이벤트·시황 (고객 맞춤)"""
+    return {"events": db.get_market_events(customer_id, limit)}
 
 
 

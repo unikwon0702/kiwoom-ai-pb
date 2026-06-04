@@ -36,8 +36,8 @@ export function useUnexpectedSignals(limit = 4) {
 }
 
 // ===== Market Events =====
-export function useMarketEvents(limit = 5) {
-  return useFetch(() => api.getMarketEvents(limit), [limit]);
+export function useMarketEvents(customerId = 'CUST0010', limit = 5) {
+  return useFetch(() => api.getMarketEvents(customerId, limit), [customerId, limit]);
 }
 
 // ===== Schedules =====
