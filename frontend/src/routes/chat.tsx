@@ -241,13 +241,29 @@ function ChatPage() {
     setLoading(true);
     try {
       console.log(`[AI_PB_DEBUG] sendAutoPrompt: customer_id=${customer.id}, segment=${customer.segmentCode}, question=${text.slice(0, 50)}`);
-      const res = await fetch("/api/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
-      });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-      const data = await res.json();
-      setConversationId(data.conversation_id);
+      // V2 우선 시도
+      let data: any = null;
+      try {
+        const v2Res = await fetch("/api/chat-v2", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode }),
+        });
+        if (v2Res.ok) {
+          const v2Data = await v2Res.json();
+          if (v2Data.structured) { data = v2Data; }
+        }
+      } catch (v2Err) { console.warn("[AI_PB] autoPrompt V2 failed", v2Err); }
+
+      if (!data) {
+        const res = await fetch("/api/chat", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
+        });
+        if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+        data = await res.json();
+        setConversationId(data.conversation_id);
+      }
+
       let tableData: TableData | null = null;
       if (data.table_data) {
         const td = data.table_data;
@@ -255,7 +271,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -267,13 +283,37 @@ function ChatPage() {
     setLoading(true);
     setHistory(p => { const n = [text, ...p.filter(q => q !== text)].slice(0, 30); try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(n)); } catch {} return n; });
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
-      });
-      if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-      const data = await res.json();
-      setConversationId(data.conversation_id);
+      // V2 우선 시도 → 실패 시 V1 fallback
+      let data: any = null;
+      let usedV2 = false;
+      try {
+        const v2Res = await fetch("/api/chat-v2", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode }),
+        });
+        if (v2Res.ok) {
+          const v2Data = await v2Res.json();
+          if (v2Data.structured) {
+            data = v2Data;
+            usedV2 = true;
+            console.log(`[AI_PB] V2 success: ${v2Data.v2_meta?.elapsed?.toFixed(2)}s, ${v2Data.v2_meta?.sections_count} sections`);
+          }
+        }
+      } catch (v2Err) {
+        console.warn("[AI_PB] V2 failed, falling back to V1", v2Err);
+      }
+
+      // V2 실패 or structured 없음 → V1 fallback
+      if (!data) {
+        const res = await fetch("/api/chat", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
+        });
+        if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+        data = await res.json();
+      }
+
+      if (!usedV2) setConversationId(data.conversation_id);
       let tableData: TableData | null = null;
       if (data.table_data) {
         const td = data.table_data;
@@ -587,8 +627,11 @@ function SectionActionList({ content }: { content: any }) {
 
 /* ===== Bot Message ===== */
 function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
-  // 구조화 응답이 있으면 카드 UI로 렌더링
-  if (msg.structured && msg.structured.intent !== "fallback") {
+  // 하이브리드 모드: answer(마크다운) + structured(차트만) 동시 표시
+  const isHybrid = msg.text && msg.structured && !msg.structured.summary && msg.structured.sections?.length > 0;
+
+  // 순수 구조화 응답 (headline+summary가 있는 경우만) → 기존 카드 UI
+  if (msg.structured && msg.structured.intent !== "fallback" && msg.structured.summary && !isHybrid) {
     return <StructuredCard data={msg.structured} customerName={customerName} />;
   }
 
@@ -613,6 +656,7 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
             {msg.text && (
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
                     ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
@@ -655,6 +699,20 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
           )}
         </div>
 
+        {/* Structured chart sections (hybrid mode) */}
+        {isHybrid && msg.structured?.sections?.map((sec: any, i: number) => (
+          sec.section_type === "chart_data" && (
+            <div key={`struct-${i}`} className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[14px]">{sec.icon}</span>
+                  <span className="text-[12px] font-bold text-gray-700">{sec.title}</span>
+                </div>
+                <SectionChart content={sec.content} />
+              </div>
+            </div>
+          )
+        ))}
         {/* Additional charts */}
         {charts.slice(1).map((chart, i) => (
           <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
