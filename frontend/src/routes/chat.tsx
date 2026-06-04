@@ -585,11 +585,12 @@ function SectionTextInsight({ content }: { content: any }) {
 function SectionChart({ content }: { content: any }) {
   const data = content?.data;
   const chartType = content?.chart_type || "donut";
-  if (!data?.length) return null;
+  // gauge는 data 배열 없이 content.value 사용
+  if (chartType !== "gauge" && !data?.length) return null;
 
   if (chartType === "donut") {
     return (
-      <div className="flex items-center justify-center py-2">
+      <div className="flex items-center justify-center py-2 w-full">
         <ResponsiveContainer width={160} height={160}>
           <PieChart>
             <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} stroke="none">
@@ -617,7 +618,7 @@ function SectionChart({ content }: { content: any }) {
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={data} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} />
+            <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#6B7280" }} interval={0} angle={-15} textAnchor="end" height={40} />
             <YAxis tick={{ fontSize: 11, fill: "#6B7280" }} unit={content?.unit || ""} />
             <Tooltip />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
@@ -699,26 +700,37 @@ function SectionChart({ content }: { content: any }) {
   }
 
   if (chartType === "gauge") {
-    const value = content?.value ?? data[0]?.value ?? 0;
+    const value = content?.value ?? (data && data[0]?.value) ?? 0;
     const max = content?.max ?? 100;
     const label = content?.label || "";
     const level = content?.level || "normal";
     const levelColors: Record<string, string> = { good: "#10B981", normal: "#3B82F6", caution: "#F59E0B", warning: "#F97316", critical: "#EF4444" };
     const color = levelColors[level] || "#606CF2";
-    const pct = Math.min((value / max) * 100, 100);
+    const pct = Math.min(value / max, 1);
+    // SVG arc gauge
+    const radius = 50;
+    const strokeWidth = 12;
+    const startAngle = -180;
+    const endAngle = 0;
+    const totalAngle = endAngle - startAngle;
+    const filledAngle = startAngle + totalAngle * pct;
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const arcX = (angle: number) => 60 + radius * Math.cos(toRad(angle));
+    const arcY = (angle: number) => 65 + radius * Math.sin(toRad(angle));
+    const bgPath = `M ${arcX(startAngle)} ${arcY(startAngle)} A ${radius} ${radius} 0 1 1 ${arcX(endAngle)} ${arcY(endAngle)}`;
+    const largeArc = (filledAngle - startAngle) > 180 ? 1 : 0;
+    const filledPath = `M ${arcX(startAngle)} ${arcY(startAngle)} A ${radius} ${radius} 0 ${largeArc} 1 ${arcX(filledAngle)} ${arcY(filledAngle)}`;
     return (
-      <div className="flex flex-col items-center py-3">
-        <div className="relative w-[140px] h-[70px] overflow-hidden">
-          {/* Background arc */}
-          <div className="absolute inset-0 rounded-t-full border-[12px] border-gray-100 border-b-0" />
-          {/* Filled arc */}
-          <div className="absolute inset-0 rounded-t-full border-[12px] border-b-0 origin-bottom" style={{ borderColor: color, clipPath: `polygon(0 100%, ${pct}% 100%, ${pct}% 0, 0 0)` }} />
-        </div>
-        <div className="text-center -mt-1">
-          <span className="text-[20px] font-bold" style={{ color }}>{typeof value === "number" ? value.toFixed(1) : value}</span>
+      <div className="flex flex-col items-center py-2">
+        <svg width="120" height="70" viewBox="0 0 120 70">
+          <path d={bgPath} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} strokeLinecap="round" />
+          <path d={filledPath} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+        </svg>
+        <div className="text-center -mt-2">
+          <span className="text-[22px] font-bold" style={{ color }}>{typeof value === "number" ? Math.round(value) : value}</span>
           <span className="text-[11px] text-gray-400 ml-1">{content?.unit || ""}</span>
         </div>
-        {label && <span className="text-[11px] text-gray-500 mt-0.5">{label}</span>}
+        {label && <span className="text-[11px] font-medium text-gray-500 mt-0.5">{label}</span>}
       </div>
     );
   }
@@ -835,7 +847,7 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
                     const chartSec = chartSections[chartIdx];
                     if (!chartSec) return null;
                     return (
-                      <div key={`chart-${idx}`} className="my-3 rounded-xl border border-gray-100 bg-gray-50/50 p-3">
+                      <div key={`chart-${idx}`} className="my-3 rounded-xl border border-gray-100 bg-gray-50/50 p-3 w-full min-h-[120px]">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-[13px]">{chartSec.icon}</span>
                           <span className="text-[11px] font-bold text-gray-600">{chartSec.title}</span>

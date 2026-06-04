@@ -428,7 +428,7 @@ def chat_v2(req: ChatRequest):
                 from collections import Counter
                 asset_counts = Counter(s.get("asset_name", "?") for s in signals if s.get("risk_notice_required"))
                 if asset_counts:
-                    bar_data = [{"name": k[:8], "value": v} for k, v in asset_counts.most_common(6)]
+                    bar_data = [{"name": k if len(k) <= 12 else k[:10] + "…", "value": v} for k, v in asset_counts.most_common(6)]
                     chart_sections.append({
                         "section_type": "chart_data",
                         "title": "종목별 위험 신호",
@@ -445,7 +445,7 @@ def chat_v2(req: ChatRequest):
                     weight = 10  # default
                     if weight_info and weight_info[0].get("holding_weight"):
                         weight = round(float(weight_info[0]["holding_weight"]) * 100, 1)
-                    scatter_data.append({"x": weight, "y": cnt, "name": asset[:6], "z": cnt * 20})
+                    scatter_data.append({"x": weight, "y": cnt, "name": asset if len(asset) <= 10 else asset[:8] + "…", "z": cnt * 20})
                 if scatter_data:
                     chart_sections.append({
                         "section_type": "chart_data",
@@ -488,30 +488,33 @@ def chat_v2(req: ChatRequest):
             "holding_profit_detail": ["수익 실현할 종목 있어?", "포트폴리오 진단해줘", "리밸런싱 필요해?"],
         }
 
-        # 마크다운에 차트 마커 삽입 (첫 번째 테이블 뒤에 차트 삽입)
+        # 마크다운에 차트 마커 삽입 (테이블 뒤에 각각 삽입)
         final_answer = markdown_response
         if chart_sections:
-            # 첫 번째 테이블 끝 이후에 첫 차트 삽입
             lines = final_answer.split("\n")
-            table_end_idx = -1
-            for i, line in enumerate(lines):
-                if line.startswith("|") and i > 0 and not lines[i-1].startswith("|") and table_end_idx == -1:
-                    pass
-                elif not line.startswith("|") and i > 0 and lines[i-1].startswith("|"):
-                    table_end_idx = i
-                    break
 
-            if table_end_idx > 0 and len(chart_sections) >= 1:
-                # 첫 테이블 뒤에 첫 차트
-                lines.insert(table_end_idx, "\n{{CHART:0}}\n")
-                # 두 번째 차트는 텍스트 중간쯤
-                if len(chart_sections) >= 2:
-                    # 전체의 70% 지점에 삽입
-                    mid_idx = int(len(lines) * 0.7)
-                    lines.insert(mid_idx, "\n{{CHART:1}}\n")
+            # 모든 테이블 끝 위치 찾기
+            table_ends = []
+            for i, line in enumerate(lines):
+                if not line.startswith("|") and i > 0 and lines[i-1].startswith("|"):
+                    table_ends.append(i)
+
+            if table_ends:
+                # 각 차트를 테이블 뒤에 순서대로 삽입 (역순으로 삽입해야 인덱스 안 밀림)
+                insertions = []
+                for chart_idx in range(len(chart_sections)):
+                    if chart_idx < len(table_ends):
+                        insertions.append((table_ends[chart_idx], chart_idx))
+                    else:
+                        # 남은 차트는 마지막 테이블 뒤에
+                        insertions.append((table_ends[-1], chart_idx))
+
+                # 역순으로 삽입 (인덱스 밀림 방지)
+                for pos, chart_idx in sorted(insertions, reverse=True):
+                    lines.insert(pos, f"\n{{{{CHART:{chart_idx}}}}}\n")
                 final_answer = "\n".join(lines)
             else:
-                # 테이블 못 찾으면 마지막에 차트 마커 추가
+                # 테이블 없으면 본문 끝에 차트 추가
                 for i in range(len(chart_sections)):
                     final_answer += f"\n\n{{{{CHART:{i}}}}}\n"
 
