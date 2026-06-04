@@ -311,8 +311,26 @@ def chat_v2(req: ChatRequest):
     logger.info(f"[V2] Intent: {intent} (conf={confidence:.2f})")
 
     if intent == "fallback" or confidence < 0.4:
-        return {"status": "fallback", "answer": "", "structured": None,
-                "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": time.time() - start}}
+        # V1 fallback 대신 LLM으로 정중한 거절 응답 생성
+        customer_name = req.customer_name or req.customer_id
+        decline_msg = llm._call(
+            model=os.environ.get("LLM_COMPOSER_MODEL", "databricks-gpt-5-4-mini"),
+            system_prompt="당신은 AI PB 어시스턴트입니다. 고객의 질문에 답변하기 어려운 경우, 정중하게 답변 범위를 안내합니다. 2~3문장으로 짧게 답변하세요. 이모지는 최소한으로 사용하세요.",
+            user_prompt=f"고객명: {customer_name}\n질문: {req.question}\n\n이 질문은 포트폴리오 분석, 위험 진단, 리밸런싱, 시장 상황 분석 범위를 벗어납니다. 정중하게 답변 가능한 범위를 안내하고, 대신 도움이 될 만한 질문을 제안해주세요.",
+            max_tokens=300,
+            temperature=0.7,
+            timeout=5.0,
+            parse_json=False,
+        )
+        if not decline_msg:
+            decline_msg = f"{customer_name}님, 해당 질문은 현재 AI PB가 분석할 수 있는 범위(포트폴리오 진단, 위험 분석, 리밸런싱, 시장 상황)를 벗어나는 것 같아요. 궁금하신 포트폴리오 현황이나 점검 포인트를 안내해드릴게요."
+        return {
+            "status": "success",
+            "answer": decline_msg,
+            "structured": None,
+            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "v2_meta": {"intent": "decline", "confidence": confidence, "elapsed": time.time() - start},
+        }
 
     # Step 3: LLM Markdown Composer
     markdown_response = compose_markdown(
@@ -518,6 +536,18 @@ def chat_v2(req: ChatRequest):
                 for i in range(len(chart_sections)):
                     final_answer += f"\n\n{{{{CHART:{i}}}}}\n"
 
+        # 이미 한 질문은 추천에서 제외
+        raw_suggestions = _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"])
+        user_q = req.question.strip()
+        suggested = [q for q in raw_suggestions if q != user_q and q not in user_q and user_q not in q]
+        # 3개 미만이면 기본 질문에서 보충
+        _defaults = ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]
+        for d in _defaults:
+            if len(suggested) >= 3:
+                break
+            if d not in suggested and d != user_q and d not in user_q and user_q not in d:
+                suggested.append(d)
+
         return {
             "status": "success",
             "answer": final_answer,
@@ -530,12 +560,18 @@ def chat_v2(req: ChatRequest):
                 "recommended_actions": [],
                 "disclaimer": "",
             } if chart_sections else None,
-            "suggested_questions": _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]),
+            "suggested_questions": suggested[:3],
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed},
         }
     else:
-        return {"status": "fallback", "answer": "", "structured": None,
-                "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed, "error": "composition_failed"}}
+        customer_name = req.customer_name or req.customer_id
+        return {
+            "status": "success",
+            "answer": f"{customer_name}님, 요청하신 내용을 분석하는 중 문제가 발생했어요. 다시 한번 질문해주시거나, 아래 추천 질문을 눌러보세요.",
+            "structured": None,
+            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed, "error": "composition_failed"},
+        }
 
 
 # ===== React SPA Static Serving =====

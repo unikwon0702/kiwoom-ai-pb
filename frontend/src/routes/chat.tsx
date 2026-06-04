@@ -257,14 +257,9 @@ function ChatPage() {
         }
       } catch (v2Err) { console.warn("[AI_PB] autoPrompt V2 failed", v2Err); }
 
+      // V1 fallback 제거 — V2가 항상 응답
       if (!data) {
-        const res = await fetch("/api/chat", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
-        });
-        if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-        data = await res.json();
-        setConversationId(data.conversation_id);
+        data = { status: "success", answer: "요청을 처리하는 중 문제가 발생했어요. 다시 시도해주세요.", structured: null, suggested_questions: ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"] };
       }
 
       let tableData: TableData | null = null;
@@ -306,14 +301,9 @@ function ChatPage() {
         console.warn("[AI_PB] V2 failed, falling back to V1", v2Err);
       }
 
-      // V2 실패 or structured 없음 → V1 fallback
+      // V2가 항상 응답 (V1 fallback 제거)
       if (!data) {
-        const res = await fetch("/api/chat", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_id: conversationId }),
-        });
-        if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-        data = await res.json();
+        data = { status: "success", answer: "요청을 처리하는 중 문제가 발생했어요. 다시 시도해주세요.", structured: null, suggested_questions: ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"] };
       }
 
       if (!usedV2) setConversationId(data.conversation_id);
