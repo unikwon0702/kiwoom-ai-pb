@@ -6,6 +6,10 @@ env:
     value: '01f154dc46ca1cf6b865087a5f21ccf9'
   - name: APP_CACHE_SCHEMA
     value: 'dev.ai_pb_gold'
+  - name: LLM_ROUTER_MODEL
+    value: 'databricks-gpt-5-4-mini'
+  - name: LLM_COMPOSER_MODEL
+    value: 'databricks-gpt-5-4-mini'
 resources:
   - name: genie-space
     genie_space:
@@ -15,3 +19,7 @@ resources:
     sql_warehouse:
       id: '6fe05215efba4694'
       permission: CAN_USE
+  - name: llm-serving-endpoint
+    serving_endpoint:
+      name: 'databricks-gpt-5-4-mini'
+      permission: CAN_QUERY

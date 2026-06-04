@@ -172,32 +172,20 @@ def compose_markdown(
 위 데이터와 세그먼트 스타일 가이드에 맞춰 마크다운 응답을 생성하세요.
 JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세요."""
 
+    # LLM 호출 (llm_client의 _call 메서드 재사용 — parse_json=False로 마크다운 반환)
     from backend.llm_client import COMPOSER_MODEL, COMPOSER_TIMEOUT
-    import httpx
-
-    # LLM 직접 호출 (JSON 파싱 없이 원문 마크다운 반환)
-    try:
-        from databricks.sdk import WorkspaceClient
-        w = WorkspaceClient()
-        response = w.api_client.do(
-            "POST",
-            "/serving-endpoints/" + COMPOSER_MODEL + "/invocations",
-            body={
-                "messages": [
-                    {"role": "system", "content": MARKDOWN_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.7,
-            },
-        )
-        text = response["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.warning(f"[MD_COMPOSER] LLM call failed: {e}")
-        return None
+    text = llm._call(
+        model=COMPOSER_MODEL,
+        system_prompt=MARKDOWN_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        max_tokens=2000,
+        temperature=0.7,
+        timeout=COMPOSER_TIMEOUT,
+        parse_json=False,
+    )
 
     if not text:
-        logger.warning("[MD_COMPOSER] Empty LLM response")
+        logger.warning("[MD_COMPOSER] LLM call returned None")
         return None
 
     # 마크다운 텍스트 정리
