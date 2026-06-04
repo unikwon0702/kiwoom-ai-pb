@@ -225,7 +225,10 @@ def chat(req: ChatRequest):
                     } if chart_sections else None,
                 }
     except Exception as e:
-        logger.warning(f"[CHAT_V2] Failed, falling back to V1: {e}")
+        import traceback
+        logger.warning(f"[CHAT_V2] Failed, falling back to V1: {e}\n{traceback.format_exc()}")
+        # 임시: V2 실패 원인을 응답에 포함 (디버깅용)
+        _v2_error = str(e)
 
     # ============ V1: Genie Space (fallback) ============
     from backend.intent_classifier import classify
@@ -268,6 +271,9 @@ def chat(req: ChatRequest):
     except Exception as e:
         logger.warning(f"[CHAT_API] Structured response failed (fallback): {e}")
 
+    # V2 에러 정보 추가 (디버깅용)
+    if '_v2_error' in dir():
+        genie_result["_v2_debug"] = _v2_error
     return genie_result
 
 
@@ -275,7 +281,7 @@ def chat(req: ChatRequest):
 
 @app.post("/api/chat-v2")
 def chat_v2(req: ChatRequest):
-    """AI PB 챗봇 V2 — LLM Orchestrator (Genie 제거, 직접 SQL + LLM)"""
+    """AI PB 챗봇 V2 — LLM Markdown Composer"""
     if not req.customer_id:
         raise HTTPException(400, "customer_id는 필수입니다.")
 
@@ -284,23 +290,18 @@ def chat_v2(req: ChatRequest):
     from concurrent.futures import ThreadPoolExecutor
     from backend.llm_client import LLMClient
     from backend.intent_router import route
-    from backend.response_composer import compose
-    from backend.validator import validate
-    from backend.data_fetcher import fetch_supplemental
+    from backend.data_fetcher import fetch_all_parallel
+    from backend.markdown_composer import compose_markdown
 
     logger = logging.getLogger("app")
     start = time.time()
 
     llm = LLMClient()
 
-    # Step 1+2 병렬: Intent Router + Data Fetch 동시 실행
-    # Router(~1초) + 전체 테이블 병렬 조회(~1.5초) = max(1, 1.5) ≈ 1.5초
-    from backend.data_fetcher import fetch_all_parallel
-
+    # Step 1+2 병렬
     with ThreadPoolExecutor(max_workers=2) as executor:
         router_future = executor.submit(route, req.question, llm)
         data_future = executor.submit(fetch_all_parallel, req.customer_id, db)
-
         route_result = router_future.result()
         data = data_future.result()
 
@@ -309,62 +310,31 @@ def chat_v2(req: ChatRequest):
 
     logger.info(f"[V2] Intent: {intent} (conf={confidence:.2f})")
 
-    # Fallback: 신뢰도 낮거나 fallback intent
     if intent == "fallback" or confidence < 0.4:
         return {"status": "fallback", "answer": "", "structured": None,
                 "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": time.time() - start}}
 
-    if not data:
-        data = {}
-
-    # Step 3: LLM Response Composer (~3~5초)
-    composed = compose(
+    # Step 3: LLM Markdown Composer
+    markdown_response = compose_markdown(
         question=req.question,
         intent=intent,
         customer_name=req.customer_name or req.customer_id,
         segment=req.segment or "SEG01",
-        data=data,
+        data=data or {},
         llm=llm,
     )
 
-    # Step 4: Validation
-    if composed:
-        validated = validate(composed, data)
-    else:
-        validated = None
-
     elapsed = time.time() - start
-    logger.info(f"[V2] Total: {elapsed:.2f}s, sections={len(validated.get('sections', [])) if validated else 0}")
 
-    if validated:
-        # 성공: 구조화 응답
+    if markdown_response:
+        logger.info(f"[V2] SUCCESS in {elapsed:.2f}s, {len(markdown_response)} chars")
         return {
             "status": "success",
-            "answer": validated.get("summary", ""),
-            "structured": {
-                "intent": intent,
-                "intent_confidence": confidence,
-                "customer_context": {
-                    "customer_id": req.customer_id,
-                    "customer_name": req.customer_name or req.customer_id,
-                    "segment_code": req.segment,
-                },
-                "headline": validated.get("summary", ""),
-                "summary": validated.get("summary", ""),
-                "overall_status": validated.get("overall_status", {}),
-                "sections": validated.get("sections", []),
-                "recommended_actions": validated.get("recommended_actions", []),
-                "disclaimer": validated.get("disclaimer", ""),
-            },
-            "v2_meta": {
-                "intent": intent,
-                "confidence": confidence,
-                "elapsed": elapsed,
-                "sections_count": len(validated.get("sections", [])),
-            },
+            "answer": markdown_response,
+            "structured": None,
+            "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed},
         }
     else:
-        # LLM 실패: fallback
         return {"status": "fallback", "answer": "", "structured": None,
                 "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed, "error": "composition_failed"}}
 

@@ -75,22 +75,25 @@ class DBClient:
             LIMIT 3
         """)
 
-        # 관심 자산 — 종목별 최신 1건 (상위 2종목)
-        interest = self._execute(f"""
-            SELECT asset_name, signal_name, signal_category, interpretation,
-                   date, '관심' AS holding_type
-            FROM (
-                SELECT s.asset_name, s.signal_name, s.signal_category,
-                       s.interpretation, s.signal_date AS date,
-                       ROW_NUMBER() OVER (PARTITION BY s.asset_name ORDER BY s.signal_date DESC) AS dedup_rn
-                FROM dev.ai_pb_gold.gd_signal_bundle_serving s
-                INNER JOIN dev.ai_pb_gold.gd_customer_interest_serving i
-                    ON s.asset_name = i.asset_name AND i.customer_id = '{customer_id}' AND i.interest_type = '관심'
-            )
-            WHERE dedup_rn = 1
-            ORDER BY date DESC
-            LIMIT 2
-        """)
+        # 관심 자산 — 종목별 최신 시그널 1건 (상위 2종목)
+        try:
+            interest = self._execute(f"""
+                SELECT asset_name, signal_name, signal_category, interpretation,
+                       date, '관심' AS holding_type
+                FROM (
+                    SELECT s.asset_name, s.signal_name, s.signal_category,
+                           s.interpretation, s.signal_date AS date,
+                           ROW_NUMBER() OVER (PARTITION BY s.asset_name ORDER BY s.signal_date DESC) AS dedup_rn
+                    FROM dev.ai_pb_gold.gd_signal_bundle_serving s
+                    INNER JOIN dev.ai_pb_gold.gd_customer_interest_serving i
+                        ON s.asset_name = i.asset_name AND i.customer_id = '{customer_id}' AND i.interest_type = '관심'
+                )
+                WHERE dedup_rn = 1
+                ORDER BY date DESC
+                LIMIT 2
+            """)
+        except Exception:
+            interest = []
 
         combined = held + interest
         return combined[:limit]
