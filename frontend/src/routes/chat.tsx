@@ -250,7 +250,7 @@ function ChatPage() {
         });
         if (v2Res.ok) {
           const v2Data = await v2Res.json();
-          if (v2Data.structured) { data = v2Data; }
+          if (v2Data.status === "success" && v2Data.answer) { data = v2Data; }
         }
       } catch (v2Err) { console.warn("[AI_PB] autoPrompt V2 failed", v2Err); }
 
@@ -293,7 +293,7 @@ function ChatPage() {
         });
         if (v2Res.ok) {
           const v2Data = await v2Res.json();
-          if (v2Data.structured) {
+          if (v2Data.status === "success" && v2Data.answer) {
             data = v2Data;
             usedV2 = true;
             console.log(`[AI_PB] V2 success: ${v2Data.v2_meta?.elapsed?.toFixed(2)}s, ${v2Data.v2_meta?.sections_count} sections`);
