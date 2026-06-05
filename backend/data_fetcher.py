@@ -105,9 +105,12 @@ def fetch_supplemental(intent: str, customer_id: str, db: DBClient) -> dict | No
 # 전체 데이터 소스 (intent 무관하게 모두 조회)
 ALL_SOURCES = [
     {"key": "diagnosis", "sql": f"SELECT * FROM {SCHEMA}.gd_serving_portfolio_diagnosis WHERE customer_id = '{{cid}}' LIMIT 1"},
-    {"key": "signals", "sql": f"SELECT asset_name, signal_name, signal_category, signal_interpretation, risk_notice_required FROM {SCHEMA}.gd_customer_portfolio_signal WHERE customer_id = '{{cid}}' LIMIT 10"},
+    {"key": "signals", "sql": f"SELECT asset_name, signal_name, signal_category, signal_interpretation, risk_notice_required, valuation_amount, holding_weight, valuation_return_rate FROM {SCHEMA}.gd_customer_portfolio_signal WHERE customer_id = '{{cid}}' LIMIT 15"},
     {"key": "insight_cards", "sql": f"SELECT title, summary, impact_level, published_at, action_recommendation FROM {SCHEMA}.gd_pb_insight_card WHERE customer_id = '{{cid}}' ORDER BY published_at DESC LIMIT 5"},
     {"key": "rebalancing", "sql": f"SELECT rebalance_needed, rebalance_urgency, rebalance_action_summary, overweight_assets, loss_cut_candidates FROM {SCHEMA}.gd_serving_rebalancing_action WHERE customer_id = '{{cid}}' LIMIT 1"},
+    {"key": "events", "sql": f"SELECT event_id, event_title, event_type, event_subtype, related_sector, related_theme, ai_investment_view, sentiment_score, impacted_asset_count, impacted_assets_json, published_at, importance_score FROM {SCHEMA}.app_cache_news_feed ORDER BY sort_timestamp DESC LIMIT 5"},
+    {"key": "market_overview", "sql": f"SELECT * FROM {SCHEMA}.app_cache_market_overview ORDER BY asset_count DESC LIMIT 10"},
+    {"key": "holdings", "sql": f"SELECT * FROM {SCHEMA}.app_cache_holding_signals WHERE customer_id = '{{cid}}' ORDER BY date DESC, rn ASC LIMIT 10"},
 ]
 
 

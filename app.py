@@ -209,107 +209,6 @@ def chat(req: ChatRequest):
                             "content": {"chart_type": "donut", "data": chart_data}
                         })
 
-                # ===== UI Block Sections (홈 화면 카드 인라인 재사용) =====
-                from backend.data_fetcher import fetch_all_parallel as _fetch
-
-                # 뉴스/이벤트 카드 (news_disclosure_impact)
-                if intent in ("news_disclosure_impact", "theme_supply_demand"):
-                    events = data.get("events", data.get("news", []))
-                    if isinstance(events, list):
-                        for ev in events[:2]:
-                            impacted = []
-                            try:
-                                import json as _json
-                                impacted_raw = ev.get("impacted_assets_json", "[]")
-                                if isinstance(impacted_raw, str):
-                                    impacted = _json.loads(impacted_raw)
-                            except Exception:
-                                pass
-                            chart_sections.append({
-                                "section_type": "event_card",
-                                "title": ev.get("event_title", "이벤트"),
-                                "icon": "📰",
-                                "content": {
-                                    "event_title": ev.get("event_title", ""),
-                                    "event_type": ev.get("event_type"),
-                                    "related_sector": ev.get("related_sector"),
-                                    "ai_investment_view": ev.get("ai_investment_view"),
-                                    "sentiment_score": ev.get("sentiment_score"),
-                                    "published_at": ev.get("published_at"),
-                                    "impacted_assets": [{
-                                        "asset_name": a.get("asset_name", ""),
-                                        "impact_direction": a.get("impact_direction", "중립"),
-                                        "short_reason": a.get("short_reason", ""),
-                                    } for a in (impacted[:4] if impacted else [])],
-                                }
-                            })
-
-                # 보유종목 카드 (holding_asset_analysis)
-                if intent in ("holding_asset_analysis", "holding_loss_detail", "holding_profit_detail"):
-                    holdings = data.get("holdings", [])
-                    if isinstance(holdings, list):
-                        for h in holdings[:3]:
-                            chart_sections.append({
-                                "section_type": "holding_card",
-                                "title": h.get("asset_name", "종목"),
-                                "icon": "📊",
-                                "content": {
-                                    "asset_name": h.get("asset_name", ""),
-                                    "holding_type": h.get("holding_type", "보유"),
-                                    "signal_name": h.get("signal_name"),
-                                    "interpretation": h.get("interpretation"),
-                                    "return_rate": h.get("return_rate") or h.get("valuation_return_rate"),
-                                    "valuation": h.get("valuation_amount"),
-                                    "weight": h.get("holding_weight"),
-                                    "risk_level": "warning" if h.get("risk_notice_required") else "caution" if h.get("signal_category") == "위험" else "good",
-                                }
-                            })
-
-                # 위험 알림 카드 (risk_alert)
-                if intent in ("risk_alert", "holding_risk_check"):
-                    signals = data.get("signals", data.get("holdings", []))
-                    if isinstance(signals, list):
-                        risk_items = []
-                        for s in signals:
-                            if s.get("risk_notice_required") or s.get("signal_category") == "위험":
-                                risk_items.append({
-                                    "level": "warning" if s.get("risk_notice_required") else "caution",
-                                    "title": f"{s.get('asset_name', '')} {s.get('signal_name', '')}",
-                                    "detail": s.get("interpretation", ""),
-                                    "asset_name": s.get("asset_name"),
-                                })
-                        if risk_items:
-                            chart_sections.append({
-                                "section_type": "risk_alert_card",
-                                "title": "위험 신호",
-                                "icon": "⚠️",
-                                "content": {
-                                    "risk_items": risk_items[:5],
-                                    "overall_risk_level": "warning" if any(r["level"] == "warning" for r in risk_items) else "caution",
-                                }
-                            })
-
-                # 시장 상황 카드 (market_context_analysis)
-                if intent == "market_context_analysis":
-                    market = data.get("market", data.get("market_overview", []))
-                    if isinstance(market, list) and market:
-                        indices = [{
-                            "name": m.get("market_segment", m.get("index_name", "")),
-                            "value": m.get("representative_price", m.get("value", "")),
-                            "change": m.get("daily_change_rate", m.get("change", "")),
-                        } for m in market[:6]]
-                        chart_sections.append({
-                            "section_type": "market_context_card",
-                            "title": "시장 현황",
-                            "icon": "📈",
-                            "content": {
-                                "market_summary": data.get("market_comment", "시장 데이터를 기반으로 분석했습니다."),
-                                "risk_level": data.get("market_risk_level", "caution"),
-                                "indices": indices,
-                                "regime": data.get("market_regime"),
-                            }
-                        })
-
                 return {
                     "status": "success",
                     "answer": markdown_response,
@@ -597,6 +496,105 @@ def chat_v2(req: ChatRequest):
                     "title": "시장 영향 받는 자산 비중",
                     "icon": "🌐",
                     "content": {"chart_type": "donut", "data": chart_items}
+                })
+
+        # ===== 인라인 카드 Sections (홈 화면 컴포넌트 재사용) =====
+        import json as _json
+
+        # 뉴스/이벤트 카드
+        if intent in ("news_disclosure_impact", "theme_supply_demand", "market_context_analysis"):
+            _events = data.get("events", [])
+            if isinstance(_events, list) and _events:
+                for _ev in _events[:2]:
+                    _impacted = []
+                    try:
+                        _imp_raw = _ev.get("impacted_assets_json") or "[]"
+                        if isinstance(_imp_raw, str) and _imp_raw.strip():
+                            _impacted = _json.loads(_imp_raw)
+                    except Exception:
+                        pass
+                    chart_sections.append({
+                        "section_type": "event_card",
+                        "title": _ev.get("event_title", "이벤트"),
+                        "icon": "📰",
+                        "content": {
+                            "event_title": _ev.get("event_title", ""),
+                            "event_type": _ev.get("event_type"),
+                            "related_sector": _ev.get("related_sector"),
+                            "ai_investment_view": _ev.get("ai_investment_view"),
+                            "sentiment_score": float(_ev["sentiment_score"]) if _ev.get("sentiment_score") else None,
+                            "published_at": _ev.get("published_at"),
+                            "impacted_assets": [{
+                                "asset_name": a.get("asset_name", ""),
+                                "impact_direction": a.get("impact_direction", "중립"),
+                                "short_reason": a.get("short_reason", ""),
+                            } for a in (_impacted[:4] if _impacted else [])],
+                        }
+                    })
+
+        # 보유종목 카드
+        if intent in ("holding_asset_analysis", "holding_loss_detail", "holding_profit_detail"):
+            _holds = data.get("holdings", data.get("signals", []))
+            if isinstance(_holds, list) and _holds:
+                for _h in _holds[:3]:
+                    chart_sections.append({
+                        "section_type": "holding_card",
+                        "title": _h.get("asset_name", "종목"),
+                        "icon": "📊",
+                        "content": {
+                            "asset_name": _h.get("asset_name", ""),
+                            "holding_type": _h.get("holding_type", "보유"),
+                            "signal_name": _h.get("signal_name"),
+                            "interpretation": _h.get("interpretation") or _h.get("signal_interpretation"),
+                            "return_rate": _h.get("return_rate") or _h.get("valuation_return_rate"),
+                            "valuation": _h.get("valuation_amount"),
+                            "weight": _h.get("holding_weight"),
+                            "risk_level": "warning" if _h.get("risk_notice_required") else "caution" if _h.get("signal_category") == "위험" else "good",
+                        }
+                    })
+
+        # 위험 알림 카드
+        if intent in ("risk_alert", "holding_risk_check"):
+            _sigs = data.get("signals", [])
+            if isinstance(_sigs, list) and _sigs:
+                _risk_items = []
+                for _s in _sigs:
+                    if _s.get("risk_notice_required") or _s.get("signal_category") == "위험":
+                        _risk_items.append({
+                            "level": "warning" if _s.get("risk_notice_required") else "caution",
+                            "title": f"{_s.get('asset_name', '')} {_s.get('signal_name', '')}",
+                            "detail": _s.get("signal_interpretation", ""),
+                            "asset_name": _s.get("asset_name"),
+                        })
+                if _risk_items:
+                    chart_sections.append({
+                        "section_type": "risk_alert_card",
+                        "title": "위험 신호",
+                        "icon": "⚠️",
+                        "content": {
+                            "risk_items": _risk_items[:5],
+                            "overall_risk_level": "warning" if any(r["level"] == "warning" for r in _risk_items) else "caution",
+                        }
+                    })
+
+        # 시장 상황 카드
+        if intent == "market_context_analysis":
+            _mkt = data.get("market_overview", [])
+            if isinstance(_mkt, list) and _mkt:
+                _indices = [{
+                    "name": str(m.get("market_segment", "")),
+                    "value": str(m.get("representative_price", "")),
+                    "change": str(m.get("daily_change_rate", "")),
+                } for m in _mkt[:6]]
+                chart_sections.append({
+                    "section_type": "market_context_card",
+                    "title": "시장 현황",
+                    "icon": "📈",
+                    "content": {
+                        "market_summary": "시장 데이터를 기반으로 분석했습니다.",
+                        "risk_level": "caution",
+                        "indices": _indices,
+                    }
                 })
 
         # Intent별 추천 질문
