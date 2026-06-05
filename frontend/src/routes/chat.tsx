@@ -223,9 +223,24 @@ function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [hasAutoPromptRun, setHasAutoPromptRun] = useState(false);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  // EventInlineCard CustomEvent listener
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.eventId) {
+        setSelectedEventId(detail.eventId);
+        setEventDialogOpen(true);
+      }
+    };
+    window.addEventListener('openEventDetail', handler);
+    return () => window.removeEventListener('openEventDetail', handler);
+  }, []);
 
   // 고객 변경 시 세션 전환 (멀티세션)
   useEffect(() => {
@@ -410,6 +425,7 @@ function ChatPage() {
           </div>
         </div>
       </div>
+      <EventDetailDialog open={eventDialogOpen} onOpenChange={setEventDialogOpen} eventId={selectedEventId} />
     </div>
   );
 }

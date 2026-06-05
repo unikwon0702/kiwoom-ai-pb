@@ -293,20 +293,25 @@ def chat(req: ChatRequest):
                 if intent == "market_context_analysis":
                     market = data.get("market", data.get("market_overview", []))
                     if isinstance(market, list) and market:
-                        indices = [{
-                            "name": m.get("market_segment", m.get("index_name", "")),
-                            "value": m.get("representative_price", m.get("value", "")),
-                            "change": m.get("daily_change_rate", m.get("change", "")),
-                        } for m in market[:6]]
+                        indices = []
+                        for m in market[:4]:
+                            _r = m.get("market_regime", "")
+                            _v = m.get("avg_volatility")
+                            _vs = f"변동성 {round(float(_v)*100,1)}%" if _v else ""
+                            indices.append({"name": m.get("market_segment", m.get("index_name", "")), "value": _r, "change": _vs})
+                        _f = market[0]
+                        if _f.get("VIX"): indices.append({"name": "VIX", "value": str(round(float(_f["VIX"]),1)), "change": ""})
+                        if _f.get("VKOSPI"): indices.append({"name": "VKOSPI", "value": str(round(float(_f["VKOSPI"]),1)), "change": ""})
+                        _rm = {"과열": "risk-on", "중립": "neutral", "침체": "risk-off"}
                         chart_sections.append({
                             "section_type": "market_context_card",
                             "title": "시장 현황",
                             "icon": "📈",
                             "content": {
-                                "market_summary": data.get("market_comment", "시장 데이터를 기반으로 분석했습니다."),
-                                "risk_level": data.get("market_risk_level", "caution"),
+                                "market_summary": _f.get("briefing_text") or data.get("market_comment", "시장 데이터를 기반으로 분석했습니다."),
+                                "risk_level": "warning" if _f.get("market_regime")=="과열" else "good" if _f.get("market_sentiment")=="긍정적" else "caution",
                                 "indices": indices,
-                                "regime": data.get("market_regime"),
+                                "regime": _rm.get(_f.get("market_regime",""), "neutral"),
                             }
                         })
 
