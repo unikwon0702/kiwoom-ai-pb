@@ -61,8 +61,7 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   }));
 
   const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => {
-    const rawDesc = e.ai_investment_view ?? '';
-    const desc = rawDesc.length > 40 ? rawDesc.slice(0, 40) + '...' : rawDesc;
+    const desc = e.ai_investment_view ?? '';
     return {
       eventId: e.event_id ?? '',
       title: e.event_title ?? '',
