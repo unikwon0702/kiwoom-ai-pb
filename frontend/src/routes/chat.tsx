@@ -2,6 +2,11 @@ import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
 import { ChevronLeft, X, Send, Menu, Mic, User, TrendingUp, Shield, Activity, PieChart as PieIcon, BarChart3, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useCustomer } from "@/lib/customer-context";
+import {
+  initSession, detectCustomerSwitch, getCurrentSessionId,
+  getSessionList, loadSessionMessages, saveSessionMessages,
+  addSession, clearAllSessions
+} from "@/lib/chatSession";
 // @ts-ignore
 import ReactMarkdown from "react-markdown";
 // @ts-ignore
@@ -45,7 +50,7 @@ type Msg =
   | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse };
 
 /* ===== Constants ===== */
-const HISTORY_KEY = "aipb_chat_questions";
+// const HISTORY_KEY = "aipb_chat_questions"; // replaced by chatSession
 const COLORS = ["#606CF2", "#8B5CF6", "#06B6D4", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#6366F1", "#F97316"];
 const GRADIENTS = [["#606CF2","#818CF8"],["#8B5CF6","#A78BFA"],["#06B6D4","#22D3EE"],["#10B981","#34D399"],["#F59E0B","#FBBF24"],["#EF4444","#FB7185"]];
 /* Strip trailing follow-up / suggested question text from Genie answer */
@@ -199,9 +204,8 @@ function fmtVal(val: any): string {
   return n.toLocaleString("ko-KR");
 }
 
-function loadHistory(): string[] {
-  try { return JSON.parse(window.localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
-}
+// loadHistory replaced by chatSession.ts
+function loadHistory(): string[] { return []; }
 
 /* ===== Main Page ===== */
 const AUTO_PROMPTS: Record<string, string> = {
@@ -211,9 +215,9 @@ const AUTO_PROMPTS: Record<string, string> = {
 function ChatPage() {
   const { customer } = useCustomer();
   const { autoPromptType } = useSearch({ from: "/chat" });
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const [messages, setMessages] = useState<Msg[]>(() => initSession(customer.id).messages as Msg[]);
   const [input, setInput] = useState("");
-  const [history, setHistory] = useState<string[]>(() => loadHistory());
+  const [history, setHistory] = useState<string[]>(() => getSessionList(customer.id).map(s => s.title));
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -222,13 +226,29 @@ function ChatPage() {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // 고객 변경 시 대화 초기화 (세그먼트별 응답 차별화를 위해 필수)
+  // 고객 변경 시 세션 전환 (멀티세션)
   useEffect(() => {
+    const switched = detectCustomerSwitch(customer.id);
+    if (switched) {
+      setMessages([]);
+      setHistory(getSessionList(customer.id).map(s => s.title));
+    }
     setConversationId(undefined);
-    setMessages([]);
     setHasAutoPromptRun(false);
-    console.log(`[AI_PB_DEBUG] Customer changed: ${customer.id} (${customer.segmentCode}) — conversation reset`);
+    console.log(`[AI_PB_DEBUG] Customer: ${customer.id} (${customer.segmentCode})`);
   }, [customer.id]);
+
+  // 메시지 자동 저장 + 세션 목록 갱신
+  useEffect(() => {
+    const sid = getCurrentSessionId();
+    if (!sid || messages.length === 0) return;
+    saveSessionMessages(sid, messages);
+    const firstUser = messages.find(m => m.role === "user");
+    if (firstUser) {
+      addSession(customer.id, firstUser.text.slice(0, 30), sid);
+      setHistory(getSessionList(customer.id).map(s => s.title));
+    }
+  }, [messages, customer.id]);
 
   // Auto-prompt: show AI announcement + call API without user bubble
   useEffect(() => {
@@ -283,7 +303,7 @@ function ChatPage() {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
     setMessages(p => [...p, { role: "user", text }]);
     setLoading(true);
-    setHistory(p => { const n = [text, ...p.filter(q => q !== text)].slice(0, 30); try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(n)); } catch {} return n; });
+    // history auto-saved by useEffect (multi-session)
     try {
       // V2 우선 시도 → 실패 시 V1 fallback
       let data: any = null;
@@ -345,8 +365,18 @@ function ChatPage() {
         </header>
 
         <HistoryPanel open={menuOpen} onClose={() => setMenuOpen(false)} history={history}
-          onSelect={q => { setMenuOpen(false); sendQuestion(q); }}
-          onClear={() => { setHistory([]); try { window.localStorage.removeItem(HISTORY_KEY); } catch {} }} />
+          onSelect={(q) => {
+            setMenuOpen(false);
+            const list = getSessionList(customer.id);
+            const match = list.find(s => s.title === q);
+            if (match) {
+              window.__AIPB_SID = match.id;
+              setMessages(loadSessionMessages(match.id) as Msg[]);
+            } else {
+              sendQuestion(q);
+            }
+          }}
+          onClear={() => { clearAllSessions(customer.id); setHistory([]); }} />
 
         <main className="flex-1 px-4 pt-5 pb-4">
           {messages.length === 0 ? <EmptyState name={customer.name} onSend={sendQuestion} /> : (
