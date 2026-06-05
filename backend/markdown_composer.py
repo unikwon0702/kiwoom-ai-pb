@@ -117,6 +117,7 @@ MARKDOWN_SYSTEM_PROMPT = """당신은 한국 증권사의 AI PB(자산관리 전
 - # ## ### 헤딩 문법 절대 금지. 섹션 구분은 이모지+텍스트로 (예: "🧮 종합 등급: ...")
 - 코드블록 (```) 금지
 - _italic_ 금지
+- %md, % md, %%md 등 노트북 매직 커맨드 절대 금지. 응답에 포함하면 절대 안 됨.
 - 위 규칙을 어기면 응답이 깨져서 보입니다.
 
 ## 허용되는 포맷
@@ -264,9 +265,8 @@ JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세
         text = text[:-3].strip()
 
     # 혹시 %md 등 노트북 마커가 포함되어 있으면 제거
-    import re as _re
-    text = _re.sub(r'\n?%\s*md\b', '', text)
-    text = text.strip()
+    text = text.replace("%md", "").replace("% md", "")
+
 
     logger.info(f"[MD_COMPOSER] Generated {len(text)} chars for {segment}")
     return text
