@@ -57,10 +57,11 @@ const GRADIENTS = [["#606CF2","#818CF8"],["#8B5CF6","#A78BFA"],["#06B6D4","#22D3
 function stripFollowUpText(text: string): string {
   // Remove trailing blocks like "Follow-up:", "추가로 궁금하신 점:", numbered suggestions, etc.
   return text
-    .replace(/(\n\s*)(Follow-up|follow-up|후속 질문 추천|추가로 궁금하신 점|더 궁금하신 점|참고로)[:\s]*\n(\s*(\d+\.|-|•|\*)\s*.+\n?)+/gi, '')
-    .replace(/(\n\s*)(추가로 궁금하신 점이나[^\n]*)/gi, '')
-    .replace(/(\n\s*)(더 궁금하신 점이 있으시면[^\n]*)/gi, '')
-    .replace(/(\n\s*)(궁금하신 점이 있으시면[^\n]*)/gi, '')
+    .replace(/\n?%\s*md\b/g, '')
+    .replace(/(\\n\\s*)(Follow-up|follow-up|후속 질문 추천|추가로 궁금하신 점|더 궁금하신 점|참고로)[:\s]*\\n(\\s*(\\d+\\.|-|•|\\*)\\s*.+\\n?)+/gi, '')
+    .replace(/(\\n\\s*)(추가로 궁금하신 점이나[^\\n]*)/gi, '')
+    .replace(/(\\n\\s*)(더 궁금하신 점이 있으시면[^\\n]*)/gi, '')
+    .replace(/(\\n\\s*)(궁금하신 점이 있으시면[^\\n]*)/gi, '')
     .trim();
 }
 
