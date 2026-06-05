@@ -737,6 +737,9 @@ def chat_v2(req: ChatRequest):
                 for i in range(len(chart_sections)):
                     final_answer += f"\n\n{{{{CHART:{i}}}}}\n"
 
+        # %md 등 불필요한 마커 제거
+        final_answer = final_answer.replace("\n%md", "").replace("%md", "").replace("% md", "").strip()
+
         # 이미 한 질문은 추천에서 제외
         raw_suggestions = _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"])
         user_q = req.question.strip()
