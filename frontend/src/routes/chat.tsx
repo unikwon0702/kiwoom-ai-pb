@@ -6,6 +6,10 @@ import { useCustomer } from "@/lib/customer-context";
 import ReactMarkdown from "react-markdown";
 // @ts-ignore
 import remarkGfm from "remark-gfm";
+import { EventInlineCard } from "@/components/chat/EventInlineCard";
+import { HoldingInlineCard } from "@/components/chat/HoldingInlineCard";
+import { RiskAlertInlineCard } from "@/components/chat/RiskAlertInlineCard";
+import { MarketContextInlineCard } from "@/components/chat/MarketContextInlineCard";
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -512,6 +516,10 @@ function StructuredCard({ data, customerName }: { data: StructuredResponse; cust
               {sec.section_type === "alert_list" && <SectionAlertList content={sec.content} />}
               {sec.section_type === "text_insight" && <SectionTextInsight content={sec.content} />}
               {sec.section_type === "action_list" && <SectionActionList content={sec.content} />}
+              {sec.section_type === "event_card" && <EventInlineCard {...sec.content} />}
+              {sec.section_type === "holding_card" && <HoldingInlineCard {...sec.content} />}
+              {sec.section_type === "risk_alert_card" && <RiskAlertInlineCard {...sec.content} />}
+              {sec.section_type === "market_context_card" && <MarketContextInlineCard {...sec.content} />}
             </div>
           </div>
         ))}
