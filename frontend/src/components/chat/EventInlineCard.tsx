@@ -9,6 +9,7 @@ type ImpactedAsset = {
 };
 
 export type EventInlineCardProps = {
+  event_id?: string;
   event_title: string;
   event_type?: string;
   related_sector?: string;
@@ -17,6 +18,7 @@ export type EventInlineCardProps = {
   published_at?: string;
   impacted_assets?: ImpactedAsset[];
   tags?: string[];
+  onClickDetail?: (eventId: string) => void;
 };
 
 function ImpactIcon({ direction }: { direction: string }) {
@@ -32,14 +34,27 @@ function impactBg(direction: string) {
 }
 
 export function EventInlineCard(props: EventInlineCardProps) {
-  const { event_title, event_type, related_sector, ai_investment_view, sentiment_score, published_at, impacted_assets, tags } = props;
+  const { event_id, event_title, event_type, related_sector, ai_investment_view, sentiment_score, published_at, impacted_assets, tags, onClickDetail } = props;
 
   const sentimentLabel = sentiment_score !== undefined
     ? sentiment_score > 0.2 ? "긍정" : sentiment_score < -0.2 ? "부정" : "중립"
     : null;
 
+  const handleClick = () => {
+    if (!event_id) return;
+    // onClickDetail prop이 있으면 사용, 없으면 CustomEvent dispatch
+    if (onClickDetail) {
+      onClickDetail(event_id);
+    } else {
+      window.dispatchEvent(new CustomEvent('openEventDetail', { detail: { eventId: event_id } }));
+    }
+  };
+
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+    <div
+      className={`rounded-xl border border-gray-200 bg-white overflow-hidden ${event_id ? 'cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all' : ''}`}
+      onClick={handleClick}
+    >
       <div className="px-3.5 pt-3 pb-2">
         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
           {event_type && <span className={TAG_CLASS}>{event_type}</span>}
@@ -82,6 +97,12 @@ export function EventInlineCard(props: EventInlineCardProps) {
           {tags.map((t, i) => (
             <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{t}</span>
           ))}
+        </div>
+      )}
+
+      {event_id && (
+        <div className="px-3.5 pb-2.5 flex items-center justify-end">
+          <span className="text-[11px] text-indigo-500 font-medium">자세히 보기 ›</span>
         </div>
       )}
     </div>

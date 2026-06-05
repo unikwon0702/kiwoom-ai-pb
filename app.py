@@ -617,6 +617,7 @@ def chat_v2(req: ChatRequest):
                         "title": _ev.get("event_title", "이벤트"),
                         "icon": "📰",
                         "content": {
+                            "event_id": _ev.get("event_id"),
                             "event_title": _ev.get("event_title", ""),
                             "event_type": _ev.get("event_type"),
                             "related_sector": _ev.get("related_sector"),
