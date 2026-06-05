@@ -871,19 +871,34 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
         </div>
 
         {/* Structured chart sections (hybrid mode - only if no inline markers) */}
-        {isHybrid && !hasInlineCharts && msg.structured?.sections?.map((sec: any, i: number) => (
-          sec.section_type === "chart_data" && (
-            <div key={`struct-${i}`} className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[14px]">{sec.icon}</span>
-                  <span className="text-[12px] font-bold text-gray-700">{sec.title}</span>
+        {isHybrid && !hasInlineCharts && msg.structured?.sections?.map((sec: any, i: number) => {
+          if (sec.section_type === "chart_data") {
+            return (
+              <div key={`struct-${i}`} className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[14px]">{sec.icon}</span>
+                    <span className="text-[12px] font-bold text-gray-700">{sec.title}</span>
+                  </div>
+                  <SectionChart content={sec.content} />
                 </div>
-                <SectionChart content={sec.content} />
               </div>
-            </div>
-          )
-        ))}
+            );
+          }
+          if (sec.section_type === "event_card") {
+            return <div key={`struct-${i}`} className="w-full"><EventInlineCard {...sec.content} /></div>;
+          }
+          if (sec.section_type === "holding_card") {
+            return <div key={`struct-${i}`} className="w-full"><HoldingInlineCard {...sec.content} /></div>;
+          }
+          if (sec.section_type === "risk_alert_card") {
+            return <div key={`struct-${i}`} className="w-full"><RiskAlertInlineCard {...sec.content} /></div>;
+          }
+          if (sec.section_type === "market_context_card") {
+            return <div key={`struct-${i}`} className="w-full"><MarketContextInlineCard {...sec.content} /></div>;
+          }
+          return null;
+        })}
         {/* Additional charts */}
         {charts.slice(1).map((chart, i) => (
           <div key={i} className="rounded-2xl bg-white border border-gray-100 shadow-sm p-4">
