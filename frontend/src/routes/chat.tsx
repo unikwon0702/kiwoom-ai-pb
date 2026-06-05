@@ -886,7 +886,7 @@ function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; custome
                     );
                   }
                 })}
-                %md
+                
 {/* 인라인 카드 sections (chart_data 외) */}
                 {isHybrid && msg.structured?.sections?.filter((s: any) => s.section_type !== "chart_data").map((sec: any, i: number) => {
                   if (sec.section_type === "event_card") return <div key={`ic-${i}`} className="my-3"><EventInlineCard {...sec.content} /></div>;
