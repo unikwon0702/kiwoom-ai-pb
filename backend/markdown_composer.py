@@ -264,9 +264,15 @@ JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세
     if text.endswith("```"):
         text = text[:-3].strip()
 
-    # 혹시 %md 등 노트북 마커가 포함되어 있으면 제거
-    text = text.replace("%md", "").replace("% md", "")
-
+    # %md 등 노트북 마커 제거 (줄 단위 필터링)
+    cleaned_lines = []
+    for line in text.split('\n'):
+        stripped = line.strip()
+        if stripped in ('%md', '% md', '%%md', '%md ', '% md '):
+            continue
+        cleaned_lines.append(line)
+    text = '\n'.join(cleaned_lines)
+    text = text.replace('%md', '').replace('% md', '').strip()
 
     logger.info(f"[MD_COMPOSER] Generated {len(text)} chars for {segment}")
     return text
