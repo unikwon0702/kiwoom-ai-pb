@@ -15,6 +15,7 @@ import { EventInlineCard } from "@/components/chat/EventInlineCard";
 import { HoldingInlineCard } from "@/components/chat/HoldingInlineCard";
 import { RiskAlertInlineCard } from "@/components/chat/RiskAlertInlineCard";
 import { MarketContextInlineCard } from "@/components/chat/MarketContextInlineCard";
+import { EventDetailDialog } from "@/components/pb/EventDetailDialog";
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
