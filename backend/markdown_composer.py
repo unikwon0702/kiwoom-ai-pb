@@ -263,5 +263,9 @@ JSON이나 코드블록이 아닌, 순수 마크다운 텍스트만 출력하세
     if text.endswith("```"):
         text = text[:-3].strip()
 
+    # 혹시 %md 등 노트북 마커가 포함되어 있으면 제거
+    text = text.replace("%md", "").replace("% md", "")
+
+
     logger.info(f"[MD_COMPOSER] Generated {len(text)} chars for {segment}")
     return text
