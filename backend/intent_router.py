@@ -39,7 +39,19 @@ INTENT_TABLE_MAP = {
     "holding_profit_detail": [
         f"{SCHEMA}.gd_customer_portfolio_signal",
     ],
-    "market_context_analysis": [],
+    "news_disclosure_impact": [
+        f"{SCHEMA}.app_cache_news_feed",
+    ],
+    "theme_supply_demand": [
+        f"{SCHEMA}.app_cache_news_feed",
+    ],
+    "holding_asset_analysis": [
+        f"{SCHEMA}.gd_customer_portfolio_signal",
+        f"{SCHEMA}.app_cache_holding_signals",
+    ],
+    "market_context_analysis": [
+        f"{SCHEMA}.app_cache_market_overview",
+    ],
     "general_financial_qna": [],
     "fallback": [],
 }
@@ -62,17 +74,24 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - portfolio_allocation_summary: 자산 유형별 비중, 구성, 배분, 평가금액 합계 조회
 - holding_loss_detail: 손실 중인 종목, 마이너스 종목 조회
 - holding_profit_detail: 수익 중인 종목, 플러스 종목 조회
-- market_context_analysis: 시장 상황, 금리, 환율, 전망
+- news_disclosure_impact: 뉴스 영향, 공시, 이벤트가 포트폴리오에 미치는 영향
+- theme_supply_demand: 테마/섹터 수급 동향, 외국인 매매, 업종 동향
+- holding_asset_analysis: 특정 종목 분석, 종목 상태, 개별 자산 질문 (삼성전자 어때? 등)
+- market_context_analysis: 시장 상황, 금리, 환율, 전망, 오늘 시장
 - general_financial_qna: 금융 용어, 개념 설명 (MDD, 샤프비율 등)
 - fallback: 위 어느 것에도 해당하지 않는 질문
 
 ## Rules
+- "뉴스", "공시", "영향", "이벤트" → news_disclosure_impact
+- "수급", "외국인", "테마", "업종 동향" → theme_supply_demand
+- 특정 종목명 + "어때", "분석", "상태" → holding_asset_analysis
 - "자산 비중", "평가금액 합계", "구성 확인" → portfolio_allocation_summary
 - "손실", "마이너스", "떨어진" → holding_loss_detail
 - "수익", "플러스", "올라간" → holding_profit_detail
 - "매도", "리밸런싱", "비중 조정" → rebalancing_recommendation
 - "위험", "알림", "주의" → risk_alert
 - "진단", "분석", "종합" → portfolio_diagnosis
+- "시장", "코스피", "금리", "환율" → market_context_analysis
 - 조회형 질문(확인, 보여줘, 얼마) vs 분석형 질문(진단, 분석) 구분 중요
 - "자산 유형별 비중과 평가금액 합계 확인" → portfolio_allocation_summary (NOT portfolio_diagnosis)
 - "손실 중인 종목 세부 현황" → holding_loss_detail (NOT portfolio_allocation_summary)
