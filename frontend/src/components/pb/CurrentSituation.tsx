@@ -72,13 +72,26 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
     };
   });
 
-  const schedules: Schedule[] = (schedulesData?.schedules ?? []).map((s: any, i: number) => ({
-    eventId: s.event_id ?? '',
-    dTag: `D-${i + 1}`,
-    date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
-    title: s.event_title ?? '',
-    desc: s.event_summary ?? s.event_subtype ?? '',
-  }));
+  const schedules: Schedule[] = (schedulesData?.schedules ?? []).map((s: any, i: number) => {
+    // enriched로 구어체 title/desc 사용
+    let title = s.event_title ?? '';
+    let desc = s.event_summary ?? s.event_subtype ?? '';
+    if (s.enriched_title) title = s.enriched_title;
+    if (s.enriched_sections) {
+      try {
+        const sec = typeof s.enriched_sections === 'string' ? JSON.parse(s.enriched_sections) : s.enriched_sections;
+        if (sec.title_friendly) title = sec.title_friendly;
+        if (sec.desc_friendly) desc = sec.desc_friendly;
+      } catch {}
+    }
+    return {
+      eventId: s.event_id ?? '',
+      dTag: `D-${i + 1}`,
+      date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
+      title,
+      desc,
+    };
+  });
 
   return { holdings, markets, schedules, loading: hLoading || mLoading || sLoading };
 }

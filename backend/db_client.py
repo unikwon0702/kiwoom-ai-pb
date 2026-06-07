@@ -57,21 +57,24 @@ class DBClient:
         return rows[0] if rows else {}
 
     # ============================================================
-    # Holding Signals [화면2]
+    # Holding Signals [화면2] + enriched content JOIN
     # ============================================================
     def get_holding_signals(self, customer_id: str, limit: int = 5) -> list[dict]:
-        """보유 + 관심 자산: 종목당 최신 시그널 1건만 반환"""
-        # 보유 자산 — 종목별 최신 1건 (상위 3종목)
+        """보유 + 관심 자산: 종목당 최신 시그널 1건 + enriched 구어체 텍스트"""
+        # 보유 자산 — 종목별 최신 1건 (상위 3종목) + enriched JOIN
         held = self._execute(f"""
-            SELECT asset_name, signal_name, signal_category, interpretation,
-                   date, holding_type
+            SELECT h.asset_name, h.signal_name, h.signal_category, h.interpretation,
+                   h.date, h.holding_type,
+                   e.sections_json AS enriched_sections
             FROM (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY asset_name ORDER BY date DESC, rn ASC) AS dedup_rn
                 FROM {self._t('app_cache_holding_signals')}
                 WHERE customer_id = '{customer_id}'
-            )
-            WHERE dedup_rn = 1
-            ORDER BY date DESC
+            ) h
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON h.asset_name = e.source_id AND e.content_type = 'holding_enrichment'
+            WHERE h.dedup_rn = 1
+            ORDER BY h.date DESC
             LIMIT 3
         """)
 
@@ -102,7 +105,7 @@ class DBClient:
     # Unexpected Signals [화면1]
     # ============================================================
     def get_unexpected_signals(self, limit: int = 4) -> list[dict]:
-        """의외의 신호: 모든 고객에게 새로운 투자 인사이트를 제공하는 뉴스 (중복·루틴 제외)"""
+        """의외의 신호: enriched_content JOIN으로 구어체 콘텐츠 포함 반환"""
         return self._execute(f"""
             WITH deduped AS (
               SELECT event_id, event_title, event_type, event_subtype,
@@ -123,12 +126,17 @@ class DBClient:
                 AND event_title NOT LIKE '%전일 대비%'
                 AND event_title NOT LIKE '%장중 속보%'
             )
-            SELECT event_id, event_title, event_type, event_subtype,
-                   related_sector, ai_investment_view,
-                   impacted_assets_json, importance_score
-            FROM deduped
-            WHERE rn = 1
-            ORDER BY importance_score DESC, sort_timestamp DESC
+            SELECT d.event_id, d.event_title, d.event_type, d.event_subtype,
+                   d.related_sector, d.ai_investment_view,
+                   d.impacted_assets_json, d.importance_score,
+                   e.headline AS enriched_headline,
+                   e.tag AS enriched_tag,
+                   e.sections_json AS enriched_sections
+            FROM deduped d
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON d.event_id = e.source_id AND e.content_type = 'unexpected_enrichment'
+            WHERE d.rn = 1
+            ORDER BY d.importance_score DESC, d.sort_timestamp DESC
             LIMIT {limit}
         """)
 
@@ -187,33 +195,40 @@ class DBClient:
         """)
 
     # ============================================================
-    # Schedules [화면4]
+    # Schedules [화면4] + enriched content JOIN
     # ============================================================
     def get_schedules(self, limit: int = 10) -> list[dict]:
         return self._execute(f"""
-            SELECT event_id, event_title, event_type, event_subtype,
-                   related_sector, event_summary, published_at
-            FROM {self._t('app_cache_news_feed')}
-            WHERE event_type IN ('실적발표', '배당', 'ELS상환', '매크로지표')
-            ORDER BY sort_timestamp DESC
+            SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
+                   n.related_sector, n.event_summary, n.published_at,
+                   e.headline AS enriched_title,
+                   e.sections_json AS enriched_sections
+            FROM {self._t('app_cache_news_feed')} n
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON n.event_id = e.source_id AND e.content_type = 'schedule_enrichment'
+            WHERE n.event_type IN ('실적발표', '배당', 'ELS상환', '매크로지표')
+            ORDER BY n.sort_timestamp DESC
             LIMIT {limit}
         """)
 
 
     # ============================================================
-    # Schedule Detail (일정 상세 팝업 — 하이브리드: 캐시 or FM)
+    # Schedule Detail (일정 상세 팝업 — enriched > 캐시 > FM)
     # ============================================================
     def get_schedule_detail(self, event_id: str) -> dict:
-        """일정 이벤트 상세: ai_investment_view 있으면 캐시, 없으면 FM 생성"""
+        """일정 이벤트 상세: enriched_content 우선, 없으면 ai_investment_view, 최후 FM"""
         import json as _json
         from datetime import date as _date
 
         row = self._execute(f"""
-            SELECT event_id, event_title, event_type, event_subtype,
-                   related_sector, event_summary, ai_investment_view,
-                   scheduled_date, relevance_to_user, importance_score
-            FROM {self._t('app_cache_news_feed')}
-            WHERE event_id = '{event_id}'
+            SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
+                   n.related_sector, n.event_summary, n.ai_investment_view,
+                   n.scheduled_date, n.relevance_to_user, n.importance_score,
+                   e.sections_json AS enriched_sections
+            FROM {self._t('app_cache_news_feed')} n
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON n.event_id = e.source_id AND e.content_type = 'schedule_enrichment'
+            WHERE n.event_id = '{event_id}'
             LIMIT 1
         """)
         if not row:
@@ -233,9 +248,29 @@ class DBClient:
             except:
                 pass
 
+        # enriched content 우선 사용
+        if event.get('enriched_sections'):
+            try:
+                sec = _json.loads(event['enriched_sections'])
+                return {
+                    "tag": d_tag,
+                    "title": sec.get('title_friendly', event['event_title']),
+                    "summaryIcon": "🤖",
+                    "summaryLabel": "AI 이벤트 요약",
+                    "summary": sec.get('summary', event.get('ai_investment_view', '')),
+                    "summarySub": sec.get('summarySub', event.get('event_summary', '')),
+                    "reasonsIcon": "📣",
+                    "reasonsLabel": "무슨 일이 일어날까?",
+                    "reasons": sec.get('reasons', [event.get('ai_investment_view', '')]),
+                    "sources": sec.get('sources', []),
+                    "hideMasters": True,
+                    "history": sec.get('history', None),
+                }
+            except:
+                pass
+
         # 캐시 확인 (ai_investment_view가 채워져 있으면)
         if event.get('ai_investment_view'):
-            # 이미 AI 의견이 있으면 파싱 시도
             ai_view = event['ai_investment_view']
             return {
                 "tag": d_tag,
@@ -407,17 +442,20 @@ class DBClient:
         """)
 
     # ============================================================
-    # Event Detail (뉴스 상세)
+    # Event Detail (뉴스 상세 + enriched content JOIN)
     # ============================================================
     def get_event_detail(self, event_id: str) -> dict:
         rows = self._execute(f"""
-            SELECT event_id, event_title, event_type, event_subtype,
-                   related_sector, related_theme, ai_investment_view,
-                   event_summary, news_summary, tags_json,
-                   impacted_assets_json, sentiment_score, importance_score,
-                   published_at
-            FROM {self._t('app_cache_news_feed')}
-            WHERE event_id = '{event_id}'
+            SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
+                   n.related_sector, n.related_theme, n.ai_investment_view,
+                   n.event_summary, n.news_summary, n.tags_json,
+                   n.impacted_assets_json, n.sentiment_score, n.importance_score,
+                   n.published_at,
+                   e.sections_json AS enriched_sections
+            FROM {self._t('app_cache_news_feed')} n
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON n.event_id = e.source_id AND e.content_type = 'event_enrichment'
+            WHERE n.event_id = '{event_id}'
             LIMIT 1
         """)
         return rows[0] if rows else {}
@@ -481,14 +519,36 @@ class DBClient:
             ORDER BY published_at DESC LIMIT 3
         """)
 
+        # 6. Enriched content (구어체)
+        enriched = self._execute(f"""
+            SELECT sections_json FROM {self._t('app_cache_enriched_content')}
+            WHERE source_id = '{asset_name}' AND content_type = 'holding_enrichment'
+            LIMIT 1
+        """)
+        enriched_data = {}
+        if enriched and enriched[0].get('sections_json'):
+            import json as _json2
+            try:
+                enriched_data = _json2.loads(enriched[0]['sections_json'])
+            except:
+                pass
+
         # 조합
         diag = diagnosis[0] if diagnosis else {}
         hold = holding_info[0] if holding_info else {}
         interpretations = [s.get('interpretation', '') for s in signals if s.get('interpretation')]
         signal_names = [s.get('signal_name', '') for s in signals if s.get('signal_name')]
 
-        summary = f"{', '.join(signal_names[:2])} 시그널이 감지됐어요." if signal_names else "최근 변동사항을 확인해보세요."
-        summary_sub = interpretations[0] if interpretations else diag.get('overall_diagnosis', '')
+        # enriched가 있으면 구어체 사용, 없으면 기존 로직
+        if enriched_data.get('summary'):
+            summary = enriched_data['summary']
+        else:
+            summary = f"{', '.join(signal_names[:2])} 시그널이 감지됐어요." if signal_names else "최근 변동사항을 확인해보세요."
+        
+        if enriched_data.get('summarySub'):
+            summary_sub = enriched_data['summarySub']
+        else:
+            summary_sub = interpretations[0] if interpretations else diag.get('overall_diagnosis', '')
 
         # 차트
         pct = float(diag.get('price_change_rate', 0) or 0) * 100
@@ -537,12 +597,18 @@ class DBClient:
             date_str = str(e.get('published_at', ''))[:7].replace('-', '.')
             history.append({"date": date_str, "change": change, "direction": d, "text": e.get('reason') or e.get('summary', '')})
 
+        # enriched reasons 우선 사용
+        if enriched_data.get('reasons'):
+            reasons_list = enriched_data['reasons']
+        else:
+            reasons_list = interpretations[:4] if interpretations else ["시그널 데이터를 분석 중이에요."]
+
         return {
-            "tag": hold.get('holding_type', '보유'),
+            "tag": '보유',
             "title": asset_name,
             "summary": summary,
             "summarySub": summary_sub,
-            "reasons": interpretations[:4] if interpretations else ["시그널 데이터를 분석 중이에요."],
+            "reasons": reasons_list,
             "chart": chart_data,
             "buyCount": buy_count,
             "sellCount": sell_count,
