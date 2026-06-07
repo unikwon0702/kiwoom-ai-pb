@@ -683,19 +683,29 @@ def chat_v2(req: ChatRequest):
         if intent == "market_context_analysis":
             _mkt = data.get("market_overview", [])
             if isinstance(_mkt, list) and _mkt:
-                _indices = [{
-                    "name": str(m.get("market_segment", "")),
-                    "value": str(m.get("representative_price", "")),
-                    "change": str(m.get("daily_change_rate", "")),
-                } for m in _mkt[:6]]
+                _indices = []
+                for m in _mkt[:4]:
+                    _regime = m.get("market_regime", "")
+                    _vol = m.get("avg_volatility")
+                    _vol_str = f"변동성 {round(float(_vol) * 100, 1)}%" if _vol else ""
+                    _indices.append({"name": str(m.get("market_segment", "")), "value": _regime, "change": _vol_str})
+                _first = _mkt[0]
+                if _first.get("VIX"):
+                    _indices.append({"name": "VIX", "value": str(round(float(_first["VIX"]), 1)), "change": ""})
+                if _first.get("VKOSPI"):
+                    _indices.append({"name": "VKOSPI", "value": str(round(float(_first["VKOSPI"]), 1)), "change": ""})
+                _regime_map = {"과열": "risk-on", "중립": "neutral", "침체": "risk-off"}
+                _summary = _first.get("briefing_text") or "시장 데이터를 기반으로 분석했습니다."
+                _risk = "warning" if _first.get("market_regime") == "과열" else "good" if _first.get("market_sentiment") == "긍정적" else "caution"
                 chart_sections.append({
                     "section_type": "market_context_card",
                     "title": "시장 현황",
                     "icon": "📈",
                     "content": {
-                        "market_summary": "시장 데이터를 기반으로 분석했습니다.",
-                        "risk_level": "caution",
+                        "market_summary": _summary,
+                        "risk_level": _risk,
                         "indices": _indices,
+                        "regime": _regime_map.get(_first.get("market_regime", ""), "neutral"),
                     }
                 })
         # Intent별 추천 질문
