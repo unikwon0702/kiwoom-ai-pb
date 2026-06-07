@@ -52,6 +52,18 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
   const tags: string[] = data?.tags_json ? JSON.parse(data.tags_json) : [];
   const allAssets: ImpactedAsset[] = data?.impacted_assets_json ? JSON.parse(data.impacted_assets_json) : [];
 
+  // Enriched content 파싱
+  let enriched: any = {};
+  if (data?.enriched_sections) {
+    try {
+      enriched = typeof data.enriched_sections === 'string' ? JSON.parse(data.enriched_sections) : data.enriched_sections;
+    } catch {}
+  }
+  const causalFlow: string[] = enriched.causal_flow ?? [];
+  const enrichedInsights: {tag: string; body: string}[] = enriched.insights ?? [];
+  const enrichedRisks: string[] = enriched.risks ?? [];
+  const shortReasonsMap: Record<string, string> = enriched.short_reasons ?? {};
+
   // 섹터별 그룹핑 (직접 영향만)
   const directAssets = allAssets.filter((a) => a.relation_type === "직접");
   const indirectAssets = allAssets.filter((a) => a.relation_type === "간접");
@@ -83,7 +95,7 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
           <span className="text-[13.5px] font-semibold text-foreground truncate">{a.asset_name}</span>
           <span className="text-[10.5px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">{a.asset_type}</span>
         </div>
-        <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{a.short_reason || a.reason}</p>
+        <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{a.short_reason || shortReasonsMap[a.asset_name] || a.reason}</p>
       </div>
     </li>
   );
@@ -109,12 +121,15 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      {tags.slice(0, 2).map((t) => (
+                      {enriched.tag && (
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${tagClassName("호재")}`}>{enriched.tag}</span>
+                      )}
+                      {tags.slice(0, enriched.tag ? 1 : 2).map((t) => (
                         <span key={t} className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${tagClassName("호재")}`}>{t}</span>
                       ))}
                     </div>
                     <h2 className="text-[19px] font-bold tracking-tight text-foreground leading-snug">
-                      {data.event_title}
+                      {enriched.headline_question ?? data.event_title}
                     </h2>
                   </div>
                   <button onClick={() => onOpenChange(false)} aria-label="닫기"
@@ -131,10 +146,22 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                       <p className="text-[15px] font-bold text-foreground leading-snug">
                         {data.ai_investment_view}
                       </p>
-                      {data.event_summary && (
+                      {(enriched.detail || data.event_summary) && (
                         <p className="text-[13px] text-muted-foreground leading-relaxed">
-                          {data.event_summary}
+                          {enriched.detail ?? data.event_summary}
                         </p>
+                      )}
+
+                      {/* 인과관계 흐름도 */}
+                      {causalFlow.length > 0 && (
+                        <div className="flex items-center justify-center gap-1.5 py-2">
+                          {causalFlow.map((step, i) => (
+                            <span key={i} className="flex items-center gap-1.5">
+                              <span className="text-[12px] font-medium text-foreground bg-muted/80 px-2 py-1 rounded-lg">{step}</span>
+                              {i < causalFlow.length - 1 && <span className="text-muted-foreground text-[14px]">→</span>}
+                            </span>
+                          ))}
+                        </div>
                       )}
 
                       {/* 섹터별 영향도 */}
@@ -172,19 +199,28 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                   </div>
                 </section>
 
-                {/* 투자 인사이트 */}
-                {insights.length > 0 && (
+                {/* 투자 인사이트 (enriched 우선) */}
+                {(enrichedInsights.length > 0 || insights.length > 0) && (
                   <section className="space-y-3">
                     <SectionTitle icon="💡">이런 흐름이 보여요</SectionTitle>
                     <ul className="space-y-2">
-                      {insights.map((ins, i) => (
-                        <li key={i} className="flex items-start gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
-                          <span className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md bg-[color:var(--brand-sub)] text-white">
-                            {tags[i] || "인사이트"}
-                          </span>
-                          <p className="text-[13px] text-foreground/90 leading-relaxed">{ins}</p>
-                        </li>
-                      ))}
+                      {enrichedInsights.length > 0
+                        ? enrichedInsights.map((ins, i) => (
+                            <li key={i} className="flex items-start gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                              <span className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md bg-[color:var(--brand-sub)] text-white">
+                                {ins.tag}
+                              </span>
+                              <p className="text-[13px] text-foreground/90 leading-relaxed">{ins.body}</p>
+                            </li>
+                          ))
+                        : insights.map((ins, i) => (
+                            <li key={i} className="flex items-start gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                              <span className="shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md bg-[color:var(--brand-sub)] text-white">
+                                {tags[i] || "인사이트"}
+                              </span>
+                              <p className="text-[13px] text-foreground/90 leading-relaxed">{ins}</p>
+                            </li>
+                          ))}
                     </ul>
                   </section>
                 )}
@@ -231,12 +267,12 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                   </section>
                 )}
 
-                {/* 리스크 */}
-                {reactions.length > 0 && (
+                {/* 리스크 (enriched 우선) */}
+                {(enrichedRisks.length > 0 || reactions.length > 0) && (
                   <section className="space-y-2">
                     <SectionTitle icon="⚠️">투자 전 꼭 확인하세요</SectionTitle>
                     <div className="rounded-xl bg-[color:var(--neg-soft)]/40 border border-[color:var(--neg)]/20 px-4 py-3 space-y-1.5">
-                      {reactions.map((r, i) => (
+                      {(enrichedRisks.length > 0 ? enrichedRisks : reactions).map((r, i) => (
                         <p key={i} className="text-[12.5px] text-foreground/90 leading-relaxed">• {r}</p>
                       ))}
                     </div>

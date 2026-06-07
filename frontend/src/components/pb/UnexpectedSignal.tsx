@@ -9,8 +9,8 @@ export function UnexpectedSignal() {
 
   const items = (data?.signals ?? []).slice(0, 2).map((s: any) => ({
     eventId: s.event_id,
-    tag: s.related_sector ?? s.event_type ?? "투자 신호",
-    title: s.event_title ?? "",
+    tag: s.enriched_tag ?? s.related_sector ?? "투자 신호",
+    title: s.enriched_headline ?? s.event_title ?? "",
   }));
 
   return (

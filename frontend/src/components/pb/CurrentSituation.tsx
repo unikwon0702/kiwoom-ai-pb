@@ -52,13 +52,25 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   const { data: marketsData, loading: mLoading } = useMarketEvents(customerId, 3);
   const { data: schedulesData, loading: sLoading } = useSchedules(3);
 
-  const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => ({
-    tag: h.holding_type ?? (h.signal_category === '관심' ? '관심' : '보유'),
-    title: h.asset_name ?? '',
-    time: getDisplayTime(h.date, i),
-    desc: h.signal_name ?? '',
-    subDesc: h.interpretation ?? '',
-  }));
+  const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => {
+    // enriched_sections가 있으면 구어체 사용
+    let desc = h.signal_name ?? '';
+    let subDesc = h.interpretation ?? '';
+    if (h.enriched_sections) {
+      try {
+        const sec = typeof h.enriched_sections === 'string' ? JSON.parse(h.enriched_sections) : h.enriched_sections;
+        if (sec.desc_friendly) desc = sec.desc_friendly;
+        if (sec.subDesc_friendly) subDesc = sec.subDesc_friendly;
+      } catch {}
+    }
+    return {
+      tag: '보유',
+      title: h.asset_name ?? '',
+      time: getDisplayTime(h.date, i),
+      desc,
+      subDesc,
+    };
+  });
 
   const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => {
     const desc = e.ai_investment_view ?? '';
