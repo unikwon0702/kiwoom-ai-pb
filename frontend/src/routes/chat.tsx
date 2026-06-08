@@ -15,7 +15,15 @@ import { EventInlineCard } from "@/components/chat/EventInlineCard";
 import { HoldingInlineCard } from "@/components/chat/HoldingInlineCard";
 import { RiskAlertInlineCard } from "@/components/chat/RiskAlertInlineCard";
 import { MarketContextInlineCard } from "@/components/chat/MarketContextInlineCard";
-import { EventDetailDialog } from "@/components/pb/EventDetailDialog";
+import { HoldingDetailContent } from "@/components/pb/HoldingDetailContent";
+import { EventDetailContent } from "@/components/pb/EventDetailContent";
+import { MasterInsightContent } from "@/components/pb/MasterInsightContent";
+import { InvestmentChangeSummaryCard } from "@/components/chat/InvestmentChangeSummaryCard";
+import { MarketEventSummaryCard } from "@/components/chat/MarketEventSummaryCard";
+import { UpcomingScheduleSummaryCard } from "@/components/chat/UpcomingScheduleSummaryCard";
+import { NewsSignalSummaryCard } from "@/components/chat/NewsSignalSummaryCard";
+import { UpcomingScheduleDetailContent } from "@/components/pb/UpcomingScheduleDetailContent";
+import { NewsSignalDetailContent } from "@/components/pb/NewsSignalDetailContent";
 import {
   PieChart, Pie, Cell,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -48,7 +56,7 @@ type StructuredResponse = {
 };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse };
+  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse; card_type?: string; card_data?: any };
 
 /* ===== Constants ===== */
 // const HISTORY_KEY = "aipb_chat_questions"; // replaced by chatSession
@@ -224,24 +232,12 @@ function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [hasAutoPromptRun, setHasAutoPromptRun] = useState(false);
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // EventInlineCard CustomEvent listener
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.eventId) {
-        setSelectedEventId(detail.eventId);
-        setEventDialogOpen(true);
-      }
-    };
-    window.addEventListener('openEventDetail', handler);
-    return () => window.removeEventListener('openEventDetail', handler);
-  }, []);
+
 
   // 고객 변경 시 세션 전환 (멀티세션)
   useEffect(() => {
@@ -310,7 +306,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -355,7 +351,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -404,7 +400,7 @@ function ChatPage() {
                 </div>
               ) : m.role === "bot" && m.isAnnouncement ? (
                 <AnnouncementMessage key={i} text={m.text} />
-              ) : <BotMessage key={i} msg={m} customerName={customer.name} />)}
+              ) : <BotMessage key={i} msg={m} customerName={customer.name} onSend={sendQuestion} />)}
               {loading && <LoadingPulse name={customer.name} />}
               {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !(messages[messages.length - 1] as any).isAnnouncement && ((messages[messages.length - 1] as any).followUps?.length > 0) && (
                 <FollowUpQuestions
@@ -426,7 +422,7 @@ function ChatPage() {
           </div>
         </div>
       </div>
-      <EventDetailDialog open={eventDialogOpen} onOpenChange={setEventDialogOpen} eventId={selectedEventId} />
+
     </div>
   );
 }
@@ -805,14 +801,79 @@ function SectionActionList({ content }: { content: any }) {
   );
 }
 
+/* ===== Card Type Renderers ===== */
+function CardTypeRenderer({ msg, onItemClick }: { msg: Msg & { role: "bot" }; onItemClick: (q: string) => void }) {
+  const { card_type, card_data } = msg as any;
+  if (!card_type || !card_data) return null;
+
+  if (card_type === "investment_change_summary") {
+    return <InvestmentChangeSummaryCard data={card_data} onItemClick={onItemClick} />;
+  }
+  if (card_type === "market_event_summary") {
+    return <MarketEventSummaryCard data={card_data} onItemClick={onItemClick} />;
+  }
+  if (card_type === "upcoming_schedule_summary") {
+    return <UpcomingScheduleSummaryCard data={card_data} onItemClick={onItemClick} />;
+  }
+  if (card_type === "news_signal_summary") {
+    return <NewsSignalSummaryCard data={card_data} onItemClick={onItemClick} />;
+  }
+  if (card_type === "investment_change_detail") {
+    return (
+      <div className="rounded-2xl border border-border/70 overflow-hidden bg-card">
+        <HoldingDetailContent {...card_data} inChat />
+      </div>
+    );
+  }
+  if (card_type === "market_event_detail") {
+    return (
+      <div className="rounded-2xl border border-border/70 overflow-hidden bg-card px-6 py-4">
+        <EventDetailContent data={card_data} inChat />
+      </div>
+    );
+  }
+  if (card_type === "upcoming_schedule_detail") {
+    return (
+      <div className="rounded-2xl border border-border/70 overflow-hidden bg-card">
+        <UpcomingScheduleDetailContent data={card_data} inChat />
+      </div>
+    );
+  }
+  if (card_type === "news_signal_detail") {
+    return (
+      <div className="rounded-2xl border border-border/70 overflow-hidden bg-card">
+        <NewsSignalDetailContent data={card_data} inChat />
+      </div>
+    );
+  }
+  if (card_type === "expert_movement_detail" || card_type === "expert_type_detail") {
+    return (
+      <div className="rounded-2xl border border-border/70 overflow-hidden bg-card">
+        <MasterInsightContent investors={card_data.investors ?? []} loading={card_data.loading ?? false} filterType={card_data.filter_type} inChat />
+      </div>
+    );
+  }
+  return null;
+}
+
 /* ===== Bot Message ===== */
-function BotMessage({ msg, customerName }: { msg: Msg & { role: "bot" }; customerName: string }) {
+function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" }; customerName: string; onSend: (q: string) => void }) {
   // 하이브리드 모드: answer(마크다운) + structured(차트만) 동시 표시
   const isHybrid = msg.text && msg.structured && !msg.structured.summary && msg.structured.sections?.length > 0;
 
+  // card_type 분기: 요약/상세 카드 렌더링
+  const cardRenderer = (msg as any).card_type ? (
+    <CardTypeRenderer msg={msg} onItemClick={onSend} />
+  ) : null;
+
   // 순수 구조화 응답 (headline+summary가 있는 경우만) → 기존 카드 UI
   if (msg.structured && msg.structured.intent !== "fallback" && msg.structured.summary && !isHybrid) {
-    return <StructuredCard data={msg.structured} customerName={customerName} />;
+    return (
+      <div className="space-y-3">
+        <StructuredCard data={msg.structured} customerName={customerName} />
+        {cardRenderer}
+      </div>
+    );
   }
 
   // 인라인 차트: {{CHART:N}} 마커를 감지해서 텍스트+차트 번갈아 렌더링

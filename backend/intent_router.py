@@ -53,6 +53,38 @@ INTENT_TABLE_MAP = {
         f"{SCHEMA}.app_cache_market_overview",
     ],
     "general_financial_qna": [],
+    # ── Phase 2: 신규 카드 인텐트 ─────────────────────────────────────────
+    "investment_change_summary": [
+        f"{SCHEMA}.app_cache_holding_signals",
+    ],
+    "investment_change_detail": [
+        f"{SCHEMA}.app_cache_holding_signals",
+        f"{SCHEMA}.gd_customer_portfolio_signal",
+    ],
+    "market_event_summary": [
+        f"{SCHEMA}.app_cache_market_events",
+    ],
+    "market_event_detail": [
+        f"{SCHEMA}.app_cache_market_events",
+    ],
+    "upcoming_schedule_summary": [
+        f"{SCHEMA}.app_cache_schedule_events",
+    ],
+    "upcoming_schedule_detail": [
+        f"{SCHEMA}.app_cache_schedule_events",
+    ],
+    "expert_movement_detail": [
+        f"{SCHEMA}.app_cache_top_investors",
+    ],
+    "expert_type_detail": [
+        f"{SCHEMA}.app_cache_top_investors",
+    ],
+    "news_signal_summary": [
+        f"{SCHEMA}.app_cache_news_feed",
+    ],
+    "news_signal_detail": [
+        f"{SCHEMA}.app_cache_news_feed",
+    ],
     "fallback": [],
 }
 
@@ -79,12 +111,22 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - holding_asset_analysis: 특정 종목 분석, 종목 상태, 개별 자산 질문 (삼성전자 어때? 등)
 - market_context_analysis: 시장 상황, 금리, 환율, 전망, 오늘 시장
 - general_financial_qna: 금융 용어, 개념 설명 (MDD, 샤프비율 등)
+- investment_change_summary: 내 투자 변동 전체 리스트 (보유종목 변동 있어?, 최근 내 투자 상황)
+- investment_change_detail: 특정 보유 종목 상세 분석 (TIGER 글로벌메타버스 알려줘, 특정 종목명 + 변동/분석/상세)
+- market_event_summary: 이벤트/시황 리스트 (지금 뜨는 이벤트, 이벤트·시황 보여줘, 오늘 주목할 이슈)
+- market_event_detail: 특정 이벤트/시황 상세 (이벤트 제목으로 상세 요청)
+- upcoming_schedule_summary: 다가오는 일정 리스트 (다가오는 일정, 앞으로 확인할 투자 일정, 이번 주 일정)
+- upcoming_schedule_detail: 특정 일정 상세 (일정명으로 상세 요청)
+- expert_movement_detail: 고수 전체 움직임 (고수들 지금 어떻게 움직여, 투자고수 움직임, 고수 매매 흐름)
+- expert_type_detail: 특정 유형 고수 (공격형 고수, 장기형 고수, 금상 고수)
+- news_signal_summary: 의외의 신호 뉴스 리스트 (뉴스 알려줘, 지금 주목할 뉴스, 의외의 신호, 시장 뉴스 요약)
+- news_signal_detail: 특정 뉴스 상세 (뉴스 제목으로 상세 요청)
 - fallback: 위 어느 것에도 해당하지 않는 질문
 
 ## Rules
-- "뉴스", "공시", "영향", "이벤트" → news_disclosure_impact
+- "뉴스", "공시", "영향", "이벤트" → news_disclosure_impact (단, "뉴스 알려줘" 처럼 단독 뉴스 조회는 news_signal_summary)
 - "수급", "외국인", "테마", "업종 동향" → theme_supply_demand
-- 특정 종목명 + "어때", "분석", "상태" → holding_asset_analysis
+- 특정 종목명 + "어때", "분석", "상태" → holding_asset_analysis (단, 보유 종목명 + "변동/상세/알려줘" → investment_change_detail)
 - "자산 비중", "평가금액 합계", "구성 확인" → portfolio_allocation_summary
 - "손실", "마이너스", "떨어진" → holding_loss_detail
 - "수익", "플러스", "올라간" → holding_profit_detail
@@ -92,6 +134,16 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - "위험", "알림", "주의" → risk_alert
 - "진단", "분석", "종합" → portfolio_diagnosis
 - "시장", "코스피", "금리", "환율" → market_context_analysis
+- "내 투자 변동", "보유 종목 변동", "최근 내 투자 상황" → investment_change_summary
+- 보유 종목 이름(예: TIGER 글로벌메타버스) 단독 or + "알려줘/상세" → investment_change_detail
+- "이벤트 알려줘", "시황 보여줘", "주목할 이슈" → market_event_summary
+- 이벤트 제목 그대로 질문 → market_event_detail
+- "다가오는 일정", "투자 일정" → upcoming_schedule_summary
+- 일정 제목 + "알려줘/상세" → upcoming_schedule_detail
+- "고수", "투자 고수" + 단독/전체 → expert_movement_detail
+- 특정 유형(공격형/장기형/금상) + "고수" → expert_type_detail
+- "뉴스 알려줘", "의외의 신호", "시장 뉴스 요약" → news_signal_summary
+- 뉴스 제목 + "알려줘/상세" → news_signal_detail
 - 조회형 질문(확인, 보여줘, 얼마) vs 분석형 질문(진단, 분석) 구분 중요
 - "자산 유형별 비중과 평가금액 합계 확인" → portfolio_allocation_summary (NOT portfolio_diagnosis)
 - "손실 중인 종목 세부 현황" → holding_loss_detail (NOT portfolio_allocation_summary)
@@ -146,6 +198,16 @@ def route(question: str, llm: LLMClient) -> dict:
         "portfolio_allocation_summary",
         "holding_loss_detail",
         "holding_profit_detail",
+        "investment_change_summary",
+        "investment_change_detail",
+        "market_event_summary",
+        "market_event_detail",
+        "upcoming_schedule_summary",
+        "upcoming_schedule_detail",
+        "expert_movement_detail",
+        "expert_type_detail",
+        "news_signal_summary",
+        "news_signal_detail",
     )
 
     logger.info(f"[ROUTER] intent={intent}, conf={confidence:.2f}, tables={len(required_tables)}")

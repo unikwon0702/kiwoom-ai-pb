@@ -399,7 +399,14 @@ def chat_v2(req: ChatRequest):
     from concurrent.futures import ThreadPoolExecutor
     from backend.llm_client import LLMClient
     from backend.intent_router import route
-    from backend.data_fetcher import fetch_all_parallel
+    from backend.data_fetcher import (
+        fetch_all_parallel,
+        build_investment_change_summary, build_investment_change_detail,
+        build_market_event_summary, build_market_event_detail,
+        build_upcoming_schedule_summary, build_upcoming_schedule_detail,
+        build_expert_movement_detail,
+        build_news_signal_summary, build_news_signal_detail,
+    )
     from backend.markdown_composer import compose_markdown
 
     logger = logging.getLogger("app")
@@ -768,6 +775,43 @@ def chat_v2(req: ChatRequest):
             if d not in suggested and d != user_q and d not in user_q and user_q not in d:
                 suggested.append(d)
 
+        # ── Phase 2: card_type / card_data 생성 ─────────────────────────────────
+        card_type = None
+        card_data = None
+        _q = req.question
+
+        if intent == "investment_change_summary":
+            card_type = "investment_change_summary"
+            card_data = build_investment_change_summary(data, _q)
+        elif intent == "investment_change_detail":
+            # 질문에서 종목명 추출 (단순 접근)
+            _asset = next((h.get("asset_name","") for h in (data.get("holdings") or []) if h.get("asset_name","") in _q), _q.split()[0] if _q else "")
+            card_type = "investment_change_detail"
+            card_data = build_investment_change_detail(data, _asset)
+        elif intent == "market_event_summary":
+            card_type = "market_event_summary"
+            card_data = build_market_event_summary(data, _q)
+        elif intent == "market_event_detail":
+            card_type = "market_event_detail"
+            card_data = build_market_event_detail(data, _q)
+        elif intent == "upcoming_schedule_summary":
+            card_type = "upcoming_schedule_summary"
+            card_data = build_upcoming_schedule_summary(data, _q)
+        elif intent == "upcoming_schedule_detail":
+            card_type = "upcoming_schedule_detail"
+            card_data = build_upcoming_schedule_detail(data, _q)
+        elif intent in ("expert_movement_detail", "expert_type_detail"):
+            card_type = intent
+            # 유형 추출: "공격형", "장기형", "금상"
+            _filter = next((t for t in ["공격형 투자", "장기형 투자", "금상"] if t in _q), None)
+            card_data = build_expert_movement_detail(data, _filter or "")
+        elif intent == "news_signal_summary":
+            card_type = "news_signal_summary"
+            card_data = build_news_signal_summary(data, _q)
+        elif intent == "news_signal_detail":
+            card_type = "news_signal_detail"
+            card_data = build_news_signal_detail(data, _q)
+
         return {
             "status": "success",
             "answer": final_answer,
@@ -780,6 +824,8 @@ def chat_v2(req: ChatRequest):
                 "recommended_actions": [],
                 "disclaimer": "",
             } if chart_sections else None,
+            "card_type": card_type,
+            "card_data": card_data,
             "suggested_questions": suggested[:3],
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed},
         }
