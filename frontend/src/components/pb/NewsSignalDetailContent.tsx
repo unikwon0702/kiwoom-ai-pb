@@ -29,7 +29,7 @@ export function NewsSignalDetailContent({ data, inChat = false, onClose }: NewsS
   const relatedAssets: { asset_name: string; asset_type?: string; reason?: string; holding?: boolean }[] = data.related_assets ?? [];
 
   return (
-    <div className={inChat ? "space-y-6" : "px-6 pt-4 pb-3 space-y-6 max-h-[78vh] overflow-y-auto"}>
+    <div className={inChat ? "px-6 pt-4 pb-3 space-y-6" : "px-6 pt-4 pb-3 space-y-6 max-h-[78vh] overflow-y-auto"}>
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">

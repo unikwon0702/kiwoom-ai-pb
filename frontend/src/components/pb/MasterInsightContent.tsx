@@ -226,7 +226,7 @@ export function MasterInsightContent({ investors, loading = false, filterType, i
   const filteredPortfolios = filterType ? portfolios.filter((p) => p.master.traits.includes(filterType)) : portfolios;
 
   return (
-    <div className={inChat ? "space-y-7" : "px-6 pt-4 pb-3 space-y-7 max-h-[78vh] overflow-y-auto"}>
+    <div className={inChat ? "px-6 pt-4 pb-3 space-y-7" : "px-6 pt-4 pb-3 space-y-7 max-h-[78vh] overflow-y-auto"}>
       {/* 헤더 */}
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[18px] font-bold tracking-tight text-foreground leading-snug">
