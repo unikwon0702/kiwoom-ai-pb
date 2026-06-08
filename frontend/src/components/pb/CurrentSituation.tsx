@@ -128,10 +128,17 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
         if (sec.desc_friendly) desc = sec.desc_friendly;
       } catch {}
     }
+    const _today = new Date();
+    _today.setHours(0, 0, 0, 0);
+    const _sd = s.scheduled_date ? new Date(s.scheduled_date) : null;
+    const _diff = _sd ? Math.round((_sd.getTime() - _today.getTime()) / 86400000) : null;
+    const _dTag = _diff !== null
+      ? (_diff === 0 ? 'D-Day' : _diff > 0 ? `D-${_diff}` : `D+${Math.abs(_diff)}`)
+      : `D-${i + 1}`;
     return {
       eventId: s.event_id ?? '',
-      dTag: `D-${i + 1}`,
-      date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
+      dTag: _dTag,
+      date: _sd ? _sd.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
       title,
       desc,
     };
