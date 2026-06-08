@@ -138,21 +138,23 @@ class ChatRequest(BaseModel):
     customer_id: str | None = None
     customer_name: str | None = None
     segment: str | None = None  # 세그먼트 코드 (SEG01~SEG04)
+    conversation_history: list[str] = []  # 직전 대화 질문 목록 (최대 5건)
 
 
-
-    signals   = data.get("signals") or []
-    holdings  = data.get("holdings") or []
+def generate_smart_followups(intent: str, data: dict, question: str, history: list) -> list:
+    """실제 데이터(종목명/시그널) 주입 + 대화 히스토리 기반 중복 제거 팔로업 생성"""
+    signals    = data.get("signals") or []
+    holdings   = data.get("holdings") or []
     rebal_list = data.get("rebalancing") or []
-    events    = (data.get("market_events") or data.get("events") or [])[:3]
-    diagnosis = data.get("diagnosis") or []
-    diag = diagnosis[0] if diagnosis else {}
+    events     = (data.get("market_events") or data.get("events") or [])[:3]
+    diagnosis  = data.get("diagnosis") or []
+    diag  = diagnosis[0] if diagnosis else {}
     rebal = rebal_list[0] if rebal_list else {}
 
-    # 위험 종목 (risk_notice_required)
+    # 위험 종목
     risk_assets = [s["asset_name"] for s in signals
                    if s.get("risk_notice_required") and s.get("asset_name")][:2]
-    # 손실 종목 (return < 0) — float 변환 안전 처리
+    # 손실 종목 — float 안전 처리
     def _is_loss(s):
         try:
             return float(s.get("valuation_return_rate") or 0) < 0
@@ -160,37 +162,35 @@ class ChatRequest(BaseModel):
             return False
     loss_assets = [s["asset_name"] for s in signals
                    if s.get("asset_name") and _is_loss(s)][:2]
-    # 보유 종목 (signals + holdings 합청)
+    # 보유 종목
     held_assets = list(dict.fromkeys(
         [h["asset_name"] for h in holdings if h.get("asset_name")] +
         [s["asset_name"] for s in signals if s.get("asset_name")]
     ))[:3]
     # 리밸런싱 대상
-    overweight_name = (rebal.get("overweight_assets") or "").split(",")[0].strip() or \
-                      (held_assets[0] if held_assets else "")
-    loss_cut_name   = (rebal.get("loss_cut_candidates") or "").split(",")[0].strip() or \
-                      (loss_assets[0] if loss_assets else "")
+    overweight_name = (rebal.get("overweight_assets") or "").split(",")[0].strip() or                       (held_assets[0] if held_assets else "")
+    loss_cut_name   = (rebal.get("loss_cut_candidates") or "").split(",")[0].strip() or                       (loss_assets[0] if loss_assets else "")
     # 이벤트/섹터
     top_event_title  = (events[0].get("event_title") or "")[:20] if events else ""
     top_event_sector = (events[0].get("related_sector") or "") if events else ""
     top_sector = diag.get("top_concentrated_sector") or top_event_sector or ""
 
-    # 홈퍼 함수
-    def _a(lst, idx=0): return lst[idx] if len(lst) > idx else None
+    def _a(lst, idx=0):
+        return lst[idx] if len(lst) > idx else None
 
-    # --- Layer 1+2: intent별 템플릿 ---
     TEMPLATES = {
         "portfolio_diagnosis": [
             f"{_a(risk_assets)} 왜 위험하다는 거야?" if risk_assets else None,
             f"{_a(held_assets)} 비중이 너무 높아?" if held_assets else None,
             f"{_a(loss_assets)} 손절해야 해?" if loss_assets else None,
             "리밸런싱 지금 해야 해?",
-            f"{top_sector} 섹터 집중도 괴찮아?" if top_sector else None,
+            f"{top_sector} 섹터 집중도 괜찮아?" if top_sector else None,
         ],
         "risk_alert": [
-            f"{_a(risk_assets)} 구체적으로 뒤가 문제야?" if risk_assets else None,
-            f"{_a(risk_assets, 1)} 도 위험해?" if _a(risk_assets, 1) else f"{_a(held_assets, 1)} 도 위험해?" if _a(held_assets, 1) else None,
-            "지금 당장 팬아야 할 게 있어?",
+            f"{_a(risk_assets)} 구체적으로 뭐가 문제야?" if risk_assets else None,
+            f"{_a(risk_assets, 1)} 도 위험해?" if _a(risk_assets, 1) else
+            f"{_a(held_assets, 1)} 도 위험해?" if _a(held_assets, 1) else None,
+            "지금 당장 팔아야 할 게 있어?",
             "포트폴리오 전체 진단해줘",
         ],
         "rebalancing_recommendation": [
@@ -201,7 +201,7 @@ class ChatRequest(BaseModel):
         ],
         "holding_risk_check": [
             f"{_a(risk_assets)} 이 신호 얼마나 심각해?" if risk_assets else None,
-            "지금 당장 팬아야 할 게 있어?",
+            "지금 당장 팔아야 할 게 있어?",
             "리밸런싱 추천해줘",
         ],
         "portfolio_allocation_summary": [
@@ -236,7 +236,7 @@ class ChatRequest(BaseModel):
         ],
         "investment_change_summary": [
             f"{_a(held_assets)} 변동 더 자세히 봐줘" if held_assets else None,
-            f"{_a(held_assets, 1)} 는 왜 바뀐었어?" if _a(held_assets, 1) else None,
+            f"{_a(held_assets, 1)} 는 왜 바뀌었어?" if _a(held_assets, 1) else None,
             "전체 포트폴리오 진단해줘",
         ],
         "investment_change_detail": [
@@ -255,7 +255,7 @@ class ChatRequest(BaseModel):
             "포트폴리오 진단해줘",
         ],
         "upcoming_schedule_summary": [
-            "일정 중 제일 중요한 거 몿야?",
+            "일정 중 제일 중요한 거 뭐야?",
             f"{_a(held_assets)} 관련 일정 있어?" if held_assets else None,
             "포트폴리오 진단해줘",
         ],
@@ -285,7 +285,7 @@ class ChatRequest(BaseModel):
             "포트폴리오 진단해줘",
         ],
         "expert_type_detail": [
-            "이 유형 포트폴리오 내꺼랑 비교해줘",
+            "이 유형 포트폴리오 내 꺼랑 비교해줘",
             f"{_a(held_assets)} 어떻게 평가해?" if held_assets else None,
             "리밸런싱 추천해줘",
         ],
@@ -300,8 +300,8 @@ class ChatRequest(BaseModel):
 
     raw = [q for q in (TEMPLATES.get(intent) or DEFAULT) if q]
 
-    # --- Layer 3: 대화 히스토리 기반 중복 제거 ---
-    all_asked = {question.strip()} | {h.strip() for h in history}
+    # 대화 히스토리 기반 중복 제거
+    all_asked = {question.strip()} | {h.strip() for h in (history or [])}
 
     def _similar(q: str) -> bool:
         q_l = q.lower()
@@ -316,7 +316,6 @@ class ChatRequest(BaseModel):
 
     filtered = [q for q in raw if not _similar(q)]
 
-    # 부족하면 기본 보충 (히스토리와 안 겨치는 것만)
     FALLBACKS = [
         f"{_a(held_assets)} 분석해줘" if held_assets else "포트폴리오 진단해줘",
         f"{_a(risk_assets)} 얼마나 위험해?" if risk_assets else "위험 종목 알려줘",
@@ -636,7 +635,7 @@ def chat_v2(req: ChatRequest):
             "status": "success",
             "answer": decline_msg,
             "structured": None,
-            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "suggested_questions": generate_smart_followups("portfolio_diagnosis", data or {}, req.question, req.conversation_history),
             "v2_meta": {"intent": "decline", "confidence": confidence, "elapsed": time.time() - start},
         }
 
@@ -955,17 +954,13 @@ def chat_v2(req: ChatRequest):
         # %md 등 불필요한 마커 제거
         final_answer = final_answer.replace("\n%md", "").replace("%md", "").replace("% md", "").strip()
 
-        # 이미 한 질문은 추천에서 제외
-        raw_suggestions = _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"])
-        user_q = req.question.strip()
-        suggested = [q for q in raw_suggestions if q != user_q and q not in user_q and user_q not in q]
-        # 3개 미만이면 기본 질문에서 보충
-        _defaults = ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]
-        for d in _defaults:
-            if len(suggested) >= 3:
-                break
-            if d not in suggested and d != user_q and d not in user_q and user_q not in d:
-                suggested.append(d)
+        # 스마트 팔로업 생성 (데이터 주입 + 히스토리 중복 제거)
+        try:
+            suggested = generate_smart_followups(intent, data or {}, req.question, req.conversation_history)
+        except Exception as _fe:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"[V2] generate_smart_followups failed: {_fe}")
+            suggested = ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]
 
         # ── Phase 2: card_type / card_data 생성 ─────────────────────────────────
         card_type = None
@@ -1035,7 +1030,7 @@ def chat_v2(req: ChatRequest):
             "status": "success",
             "answer": f"{customer_name}님, 요청하신 내용을 분석하는 중 문제가 발생했어요. 다시 한번 질문해주시거나, 아래 추천 질문을 눌러보세요.",
             "structured": None,
-            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "suggested_questions": generate_smart_followups("portfolio_diagnosis", data or {}, req.question, req.conversation_history),
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed, "error": "composition_failed"},
         }
 
