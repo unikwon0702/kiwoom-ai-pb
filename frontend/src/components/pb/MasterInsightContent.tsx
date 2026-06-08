@@ -36,8 +36,10 @@ function buildMasters(investors: any[]): Master[] {
 
 function buildDailyPicks(investors: any[], masters: Master[]): DailyPick[] {
   return investors.map((inv, i) => {
-    const buyRaw = inv.daily_buy_tickers ? JSON.parse(inv.daily_buy_tickers) : [];
-    const sellRaw = inv.daily_sell_tickers ? JSON.parse(inv.daily_sell_tickers) : [];
+    const _buyStr = inv.daily_buy_tickers ?? inv.daily_buys_json;
+    const _sellStr = inv.daily_sell_tickers ?? inv.daily_sells_json;
+    const buyRaw = _buyStr ? (typeof _buyStr === "string" ? JSON.parse(_buyStr) : _buyStr) : [];
+    const sellRaw = _sellStr ? (typeof _sellStr === "string" ? JSON.parse(_sellStr) : _sellStr) : [];
     const buys: Pick[] = buyRaw.map((t: any) => ({ ticker: typeof t === "string" ? t : t.ticker ?? t.asset_name ?? "?", weight: typeof t === "object" ? (t.weight ?? 20) : 20 }));
     const sells: Pick[] = sellRaw.map((t: any) => ({ ticker: typeof t === "string" ? t : t.ticker ?? t.asset_name ?? "?", weight: typeof t === "object" ? (t.weight ?? 20) : 20 }));
     const dateStr = inv.signal_date ? new Date(inv.signal_date).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit", weekday: "short" }) : "최근";
