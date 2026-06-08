@@ -137,7 +137,7 @@ export function HoldingDetailContent({
   const mastersList = masters ?? defaultMasters;
 
   return (
-    <div className={inChat ? "space-y-7" : "px-6 pt-4 pb-3 space-y-7 max-h-[78vh] overflow-y-auto"}>
+    <div className={inChat ? "px-6 pt-4 pb-3 space-y-7" : "px-6 pt-4 pb-3 space-y-7 max-h-[78vh] overflow-y-auto"}>
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">

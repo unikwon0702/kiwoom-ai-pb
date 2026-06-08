@@ -784,10 +784,18 @@ def chat_v2(req: ChatRequest):
             card_type = "investment_change_summary"
             card_data = build_investment_change_summary(data, _q)
         elif intent == "investment_change_detail":
-            # 질문에서 종목명 추출 (단순 접근)
-            _asset = next((h.get("asset_name","") for h in (data.get("holdings") or []) if h.get("asset_name","") in _q), _q.split()[0] if _q else "")
+            # 질문에서 종목명 추출
+            _asset = next((h.get("asset_name","") for h in (data.get("holdings") or []) if h.get("asset_name","") in _q), "")
             card_type = "investment_change_detail"
-            card_data = build_investment_change_detail(data, _asset)
+            # build_investment_change_detail 대신 get_holding_detail 직접 호출 (chart/masters/reasons 포함)
+            if _asset:
+                try:
+                    card_data = db.get_holding_detail(req.customer_id, _asset)
+                except Exception as _e:
+                    logger.warning(f"[CHAT_V2] get_holding_detail failed: {_e}")
+                    card_data = build_investment_change_detail(data, _asset)
+            else:
+                card_data = build_investment_change_detail(data, _asset)
         elif intent == "market_event_summary":
             card_type = "market_event_summary"
             card_data = build_market_event_summary(data, _q)
