@@ -1048,6 +1048,9 @@ function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" };
             </div>
           </div>
         )}
+
+        {/* card_type 기반 인라인 카드 렌더링 */}
+        {cardRenderer}
       </div>
     </div>
   );
