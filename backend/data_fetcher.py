@@ -115,7 +115,7 @@ ALL_SOURCES = [
     {"key": "market_events", "sql": f"SELECT event_id, event_title, event_type, event_subtype, related_sector, related_theme, ai_investment_view, sentiment_score, importance_score, published_at, event_summary, impacted_assets AS impacted_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '뉴스' ORDER BY published_at DESC LIMIT 8"},
     {"key": "schedule_events", "sql": f"SELECT event_id, event_title, event_type AS d_tag, published_at AS event_date, event_summary AS description, CAST(NULL AS STRING) AS key_points_json, CAST(NULL AS STRING) AS past_cases_json, CAST(NULL AS STRING) AS related_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type IN ('실적발표', '주총', '정기공시', 'ELS평가일', '매크로지표', '배당', '외교이벤트') ORDER BY published_at DESC LIMIT 8"},
     {"key": "top_investors", "sql": f"SELECT customer_id AS investor_id, investor_type, latest_trade_date AS signal_date, daily_buys_json AS daily_buy_tickers, daily_sells_json AS daily_sell_tickers, sector_allocation_json, domestic_top_json, overseas_top_json, total_asset_krw, holding_count AS avg_holdings, investor_emoji, short_status, tags_json, total_return_pct FROM {SCHEMA}.app_top_investor_cache ORDER BY rank ASC LIMIT 3"},
-    {"key": "news_feed", "sql": f"SELECT news_id, event_id, news_title AS title, event_title, event_subtype AS badge, ai_investment_view AS description, news_summary, tags_json AS hashtags_json, related_sector, sentiment_score, importance_score, published_at FROM {SCHEMA}.app_cache_news_feed ORDER BY published_at DESC LIMIT 8"},
+    {"key": "news_feed", "sql": f"SELECT news_id, event_id, news_title AS title, event_title, event_subtype AS badge, ai_investment_view AS description, news_summary, event_summary, TO_JSON(tags) AS hashtags_json, related_sector, related_theme, sentiment_score, importance_score, published_at, impacted_assets AS related_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '\ub274\uc2a4' ORDER BY published_at DESC LIMIT 8"},
 ]
 
 
@@ -292,18 +292,50 @@ def build_news_signal_summary(data: dict, question: str = "") -> dict:
 
 
 def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
-    """app_cache_news_feed → NewsSignalDetailContentProps"""
+    """gd_llm_event_context(뉴스) → NewsSignalDetailContentProps"""
     import json
     news = data.get("news_feed") or data.get("events", [])
-    target = next((n for n in news if news_title and news_title in (n.get("title") or n.get("event_title", ""))), news[0] if news else {})
-    why = target.get("why_notable_json")
-    sectors = target.get("sector_impacts_json")
-    hashtags = target.get("hashtags_json")
-    related = target.get("related_assets_json")
+    # 제목 매칭 (title 또는 event_title)
+    target = next(
+        (n for n in news if news_title and (
+            news_title in (n.get("title") or "") or
+            news_title in (n.get("event_title") or "")
+        )),
+        news[0] if news else {}
+    )
+    # hashtags: tags JSON 배열
+    hashtags_raw = target.get("hashtags_json")
+    try:
+        hashtags = json.loads(hashtags_raw) if isinstance(hashtags_raw, str) else (hashtags_raw or [])
+    except:
+        hashtags = []
+
+    # related_assets: impacted_assets 파싱
+    related_raw = target.get("related_assets_json")
+    try:
+        related = json.loads(related_raw) if isinstance(related_raw, str) else (related_raw or [])
+        if isinstance(related, list):
+            related = [{"asset_name": r.get("asset_name", ""), "asset_type": r.get("asset_type", ""),
+                        "reason": r.get("short_reason") or r.get("reason", "")} for r in related[:5]]
+    except:
+        related = []
+
+    # why_notable: event_summary → 문장 분리
+    summary = target.get("event_summary") or target.get("news_summary") or target.get("description") or ""
+    why_notable = [s.strip() for s in summary.split(". ") if len(s.strip()) > 5][:3]
+
+    # sector_impacts: related_sector 기반
+    sector = target.get("related_sector") or target.get("related_theme") or ""
+    sentiment = float(target.get("sentiment_score") or 0)
+    sector_impacts = [{"sector": sector, "direction": "positive" if sentiment >= 0 else "negative",
+                       "impact_pct": round(abs(sentiment) * 10, 1)}] if sector else []
+
     return {
         "title": target.get("title") or target.get("event_title", ""),
-        "why_notable": json.loads(why) if isinstance(why, str) else (why or []),
-        "sector_impacts": json.loads(sectors) if isinstance(sectors, str) else (sectors or []),
-        "hashtags": json.loads(hashtags) if isinstance(hashtags, str) else (hashtags or []),
-        "related_assets": json.loads(related) if isinstance(related, str) else (related or []),
+        "badge": target.get("badge") or target.get("event_subtype"),
+        "why_notable": why_notable,
+        "sector_impacts": sector_impacts,
+        "hashtags": hashtags if isinstance(hashtags, list) else [],
+        "related_assets": related,
+        "ai_view": target.get("description") or target.get("ai_investment_view") or "",
     }
