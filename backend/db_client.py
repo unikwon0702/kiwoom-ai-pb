@@ -171,14 +171,17 @@ class DBClient:
                 AND n.event_title NOT LIKE '%전일 대비%'
                 AND n.event_title NOT LIKE '%표]%'
             )
-            SELECT event_id, event_title, event_type, event_subtype,
-                   related_sector, related_theme, ai_investment_view,
-                   sentiment_score, impacted_asset_count,
-                   impacted_assets_json, published_at,
-                   primary_asset, impact_direction
-            FROM matching_news
-            WHERE rn = 1
-            ORDER BY sort_timestamp DESC
+            SELECT m.event_id, m.event_title, m.event_type, m.event_subtype,
+                   m.related_sector, m.related_theme, m.ai_investment_view,
+                   m.sentiment_score, m.impacted_asset_count,
+                   m.impacted_assets_json, m.published_at,
+                   m.primary_asset, m.impact_direction,
+                   e.sections_json AS enriched_sections
+            FROM matching_news m
+            LEFT JOIN {self._t('app_cache_enriched_content')} e
+              ON m.event_id = e.source_id AND e.content_type = 'event_enrichment'
+            WHERE m.rn = 1
+            ORDER BY m.sort_timestamp DESC
             LIMIT {limit}
         """)
 

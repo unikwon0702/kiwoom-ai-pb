@@ -7,6 +7,31 @@ import { MarketEventDetailDialog } from "./MarketEventDetailDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
 import { api } from "@/lib/api";
+
+// 반말→요체 변환 (카드 desc 일관성)
+function normalizeYo(text: string): string {
+  if (!text) return text;
+  const t = text.trimEnd();
+  // 이미 요체면 그대로
+  if (/[요죠]$/.test(t)) return text;
+  // 반말 → 요체 변환 규칙 (길이가 긴 패턴 먼저!)
+  const rules: [RegExp, string][] = [
+    [/거야$/, '거예요'],
+    [/이야$/, '이에요'],
+    [/된다$/, '돼요'],
+    [/돼$/, '돼요'],
+    [/해$/, '해요'],
+    [/져$/, '져요'],
+    [/야$/, '예요'],
+    [/어$/, '어요'],
+    [/아$/, '아요'],
+  ];
+  for (const [pattern, replacement] of rules) {
+    if (pattern.test(t)) return t.replace(pattern, replacement);
+  }
+  // fallback: "요" 붙이기
+  return t + '요';
+}
 import { getDisplayTime } from "@/lib/date";
 function SummaryBlock({ icon, label, children }: { icon: string; label: string; children: React.ReactNode }) {
   return (
@@ -73,7 +98,14 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   });
 
   const markets: Market[] = (marketsData?.events ?? []).map((e: any, i: number) => {
-    const desc = e.ai_investment_view ?? '';
+    // enriched opinions[0]를 desc로 우선 사용 (항상 요체)
+    let desc = normalizeYo(e.ai_investment_view ?? '');
+    if (e.enriched_sections) {
+      try {
+        const sec = typeof e.enriched_sections === 'string' ? JSON.parse(e.enriched_sections) : e.enriched_sections;
+        if (sec.opinions && sec.opinions.length > 0) desc = normalizeYo(sec.opinions[0]);
+      } catch {}
+    }
     return {
       eventId: e.event_id ?? '',
       title: e.event_title ?? '',

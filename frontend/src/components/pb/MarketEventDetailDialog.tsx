@@ -60,9 +60,23 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
     allAssets = data?.impacted_assets_json ? (typeof data.impacted_assets_json === "string" ? JSON.parse(data.impacted_assets_json) : data.impacted_assets_json) : [];
   } catch { allAssets = []; }
 
-  // 직접 영향 → 섹터 그룹핑
-  const directAssets = allAssets.filter((a) => a.relation_type === "직접");
-  const indirectAssets = allAssets.filter((a) => a.relation_type !== "직접");
+  // Enriched content 파싱
+  let enriched: any = {};
+  if (data?.enriched_sections) {
+    try {
+      enriched = typeof data.enriched_sections === 'string' ? JSON.parse(data.enriched_sections) : data.enriched_sections;
+    } catch {}
+  }
+  const enrichedOpinions: string[] = enriched.opinions ?? [];
+  const causalFlow: string[] = enriched.causal_flow ?? [];
+  const enrichedRisks: string[] = enriched.risks ?? [];
+  const shortReasonsMap: Record<string, string> = enriched.short_reasons ?? {};
+
+  // 직접 영향 → 섹터 그룹핑 (직접이 없으면 간접을 메인으로 승격)
+  const rawDirect = allAssets.filter((a) => a.relation_type === "직접");
+  const rawIndirect = allAssets.filter((a) => a.relation_type !== "직접");
+  const directAssets = rawDirect.length > 0 ? rawDirect : rawIndirect;
+  const indirectAssets = rawDirect.length > 0 ? rawIndirect : [];
 
   const sectorMap: Record<string, Asset[]> = {};
   directAssets.forEach((a) => {
@@ -77,9 +91,11 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
 
   const tab = sectorTabs[activeTab] ?? sectorTabs[0];
 
-  // AI 의견 → 문장 분리
+  // AI 의견: enriched 우선, fallback → ai_investment_view 문장 분리
   const aiView = data?.ai_investment_view || "";
-  const opinions = aiView.split(/[.。]\s*/).filter((s: string) => s.trim().length > 5);
+  const opinions = enrichedOpinions.length > 0
+    ? enrichedOpinions
+    : aiView.split(/[.。]\s*/).filter((s: string) => s.trim().length > 5);
 
   // 히스토리 (similar_past_case에서 추출)
   const historyItems = allAssets
@@ -135,9 +151,26 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                 <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
                   <span>📌</span><span>이벤트 요약</span>
                 </div>
-                <p className="text-[16px] font-bold text-foreground leading-snug">{data.event_title}</p>
+                <p className="text-[16px] font-bold text-foreground leading-snug">{data.ai_investment_view || data.event_title}</p>
                 <p className="text-[13.5px] text-muted-foreground leading-relaxed">{data.event_summary || ""}</p>
               </section>
+
+              {/* 인과 흐름도 */}
+              {causalFlow.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+                    <span>🔄</span><span>핵심 흐름</span>
+                  </div>
+                  <div className="flex items-center justify-center gap-1.5 py-2">
+                    {causalFlow.map((step, i) => (
+                      <span key={i} className="flex items-center gap-1.5">
+                        <span className="text-[12px] font-medium text-foreground bg-muted/80 px-2.5 py-1.5 rounded-lg">{step}</span>
+                        {i < causalFlow.length - 1 && <span className="text-muted-foreground text-[14px]">→</span>}
+                      </span>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {/* 🤖 AI PB 의견 */}
               {opinions.length > 0 && (
@@ -197,7 +230,7 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                                   ? <TrendingUp className="size-3.5 text-[color:var(--pos)]" />
                                   : <TrendingDown className="size-3.5 text-[color:var(--neg)]" />}
                               </div>
-                              <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason}</p>
+                              <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason || shortReasonsMap[a.asset_name] || ""}</p>
                             </div>
                           </li>
                         ))}
@@ -240,7 +273,7 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                                 ? <TrendingUp className="size-3.5 text-[color:var(--pos)]" />
                                 : <TrendingDown className="size-3.5 text-[color:var(--neg)]" />}
                             </div>
-                            <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason}</p>
+                            <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason || shortReasonsMap[a.asset_name] || ""}</p>
                           </div>
                         </li>
                       ))}
@@ -271,6 +304,19 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                       ))}
                     </ol>
                   )}
+                </section>
+              )}
+              {/* ⚠️ 리스크 */}
+              {enrichedRisks.length > 0 && (
+                <section className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+                    <span>⚠️</span><span>투자 전 꼭 확인하세요</span>
+                  </div>
+                  <div className="rounded-xl bg-[color:var(--neg-soft)]/40 border border-[color:var(--neg)]/20 px-4 py-3 space-y-1.5">
+                    {enrichedRisks.map((r, i) => (
+                      <p key={i} className="text-[12.5px] text-foreground/90 leading-relaxed">• {r}</p>
+                    ))}
+                  </div>
                 </section>
               )}
             </div>
