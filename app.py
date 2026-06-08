@@ -979,6 +979,11 @@ def chat_v2(req: ChatRequest):
 
         # disclaimer 분리 (렌더링 순서 제어를 위해 별도 필드로)
         final_answer, _disclaimer = _extract_disclaimer(final_answer)
+        # 투자 권유/제안 성격의 intent에만 disclaimer 표시
+        # 단순 사실확인(general_financial_qna, fallback)에는 미표시
+        _NO_DISCLAIMER_INTENTS = {"general_financial_qna", "fallback"}
+        if not _disclaimer and intent not in _NO_DISCLAIMER_INTENTS:
+            _disclaimer = "투자 의사결정은 본인 판단과 책임하에 진행해 주세요. ☺️ 궁금한 점은 언제든지 질문해 주세요." 
 
         # 스마트 팔로업 생성 (데이터 주입 + 히스토리 중복 제거)
         try:
