@@ -158,10 +158,14 @@ def generate_smart_followups(intent: str, data: dict, question: str, history: li
     # 위험 종목 (risk_notice_required)
     risk_assets = [s["asset_name"] for s in signals
                    if s.get("risk_notice_required") and s.get("asset_name")][:2]
-    # 손실 종목 (return < 0)
+    # 손실 종목 (return < 0) — float 변환 안전 처리
+    def _is_loss(s):
+        try:
+            return float(s.get("valuation_return_rate") or 0) < 0
+        except (TypeError, ValueError):
+            return False
     loss_assets = [s["asset_name"] for s in signals
-                   if s.get("asset_name") and
-                   float(s.get("valuation_return_rate") or 0) < 0][:2]
+                   if s.get("asset_name") and _is_loss(s)][:2]
     # 보유 종목 (signals + holdings 합청)
     held_assets = list(dict.fromkeys(
         [h["asset_name"] for h in holdings if h.get("asset_name")] +
@@ -959,7 +963,11 @@ def chat_v2(req: ChatRequest):
         final_answer = final_answer.replace("\n%md", "").replace("%md", "").replace("% md", "").strip()
 
         # 스마트 팔로업 질문 생성 (Layer1+2+3)
-        suggested = generate_smart_followups(intent, data or {}, req.question, req.conversation_history)
+        try:
+            suggested = generate_smart_followups(intent, data or {}, req.question, req.conversation_history)
+        except Exception as _fe:
+            logger.warning(f"[V2] generate_smart_followups failed: {_fe}")
+            suggested = ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]
 
         # ── Phase 2: card_type / card_data 생성 ─────────────────────────────────
         card_type = None
