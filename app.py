@@ -130,6 +130,29 @@ def get_customer_interests(customer_id: str = Query(...)):
     return {"interests": db.get_customer_interests(customer_id)}
 
 
+
+# ===== Disclaimer 추출 헬퍼 =====
+_DISCLAIMER_PATTERNS = [
+    "투자 의사결정은 본인 판단과 책임하에 진행해 주세요.",
+    "참고용. 본인 판단 하에 실행.",
+    "본 내용은 참고용이며 투자 판단은 본인 책임입니다.",
+    "본 분석은 참고 인사이트입니다.",
+]
+
+def _extract_disclaimer(text: str) -> tuple:
+    """본문에서 disclaimer 줄을 추출하고 (clean_text, disclaimer) 반환"""
+    if not text:
+        return text, ""
+    for pattern in _DISCLAIMER_PATTERNS:
+        if pattern in text:
+            lines = text.splitlines()
+            disc_lines = [l for l in lines if pattern in l]
+            body_lines = [l for l in lines if pattern not in l]
+            disclaimer = " ".join(disc_lines).strip()
+            clean_text = "\n".join(body_lines).rstrip()
+            return clean_text, disclaimer
+    return text, ""
+
 # ===== Chat API (Genie Space) =====
 
 class ChatRequest(BaseModel):
@@ -954,6 +977,9 @@ def chat_v2(req: ChatRequest):
         # %md 등 불필요한 마커 제거
         final_answer = final_answer.replace("\n%md", "").replace("%md", "").replace("% md", "").strip()
 
+        # disclaimer 분리 (렌더링 순서 제어를 위해 별도 필드로)
+        final_answer, _disclaimer = _extract_disclaimer(final_answer)
+
         # 스마트 팔로업 생성 (데이터 주입 + 히스토리 중복 제거)
         try:
             suggested = generate_smart_followups(intent, data or {}, req.question, req.conversation_history)
@@ -1010,6 +1036,7 @@ def chat_v2(req: ChatRequest):
         return {
             "status": "success",
             "answer": final_answer,
+            "disclaimer": _disclaimer,
             "structured": {
                 "intent": intent,
                 "headline": "",

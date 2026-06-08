@@ -56,7 +56,7 @@ type StructuredResponse = {
 };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse; card_type?: string; card_data?: any };
+  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse; card_type?: string; card_data?: any; disclaimer?: string };
 
 /* ===== Constants ===== */
 // const HISTORY_KEY = "aipb_chat_questions"; // replaced by chatSession
@@ -1053,6 +1053,13 @@ function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" };
 
         {/* card_type 기반 인라인 카드 렌더링 */}
         {cardRenderer}
+
+        {/* Disclaimer — 항상 최하단 */}
+        {(msg as any).disclaimer && (
+          <p className="text-[11px] text-gray-400 px-1 pt-2 border-t border-gray-100 mt-1">
+            {(msg as any).disclaimer}
+          </p>
+        )}
       </div>
     </div>
   );
