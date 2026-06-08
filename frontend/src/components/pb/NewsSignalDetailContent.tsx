@@ -87,7 +87,7 @@ export function NewsSignalDetailContent({ data, inChat = false, onClose }: NewsS
           {hashtags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-1">
               {hashtags.map((tag) => (
-                <span key={tag} className="text-[12px] px-2.5 py-1 rounded-full bg-muted text-foreground/70">{tag}</span>
+                <span key={tag} className="inline-flex items-center text-[12px] font-semibold px-2.5 py-1.5 rounded-full border bg-card text-foreground/80 border-border/60 whitespace-nowrap">{tag}</span>
               ))}
             </div>
           )}
