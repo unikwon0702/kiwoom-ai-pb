@@ -284,9 +284,10 @@ function ChatPage() {
       // V2 우선 시도
       let data: any = null;
       try {
+        const priorQs = messages.filter(m => m.role === "user").map(m => m.text).slice(-5);
         const v2Res = await fetch("/api/chat-v2", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode }),
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_history: priorQs }),
         });
         if (v2Res.ok) {
           const v2Data = await v2Res.json();
@@ -322,9 +323,10 @@ function ChatPage() {
       let data: any = null;
       let usedV2 = false;
       try {
+        const priorQs = messages.filter(m => m.role === "user").map(m => m.text).slice(-5);
         const v2Res = await fetch("/api/chat-v2", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode }),
+          body: JSON.stringify({ question: text, customer_id: customer.id, customer_name: customer.name, segment: customer.segmentCode, conversation_history: priorQs }),
         });
         if (v2Res.ok) {
           const v2Data = await v2Res.json();

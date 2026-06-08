@@ -140,6 +140,200 @@ class ChatRequest(BaseModel):
     segment: str | None = None  # 세그먼트 코드 (SEG01~SEG04)
 
 
+def generate_smart_followups(intent: str, data: dict, question: str, history: list) -> list:
+    """
+    3-Layer 팔로업 질문 생성
+    Layer 1: 실제 데이터(종목명/시그널/이벤트) 주입한 개인화 템플릿
+    Layer 2: intent 진행 트리 (다음 단계 주제로 유도)
+    Layer 3: 대화 히스토리 기반 중복 제거
+    """
+    signals   = data.get("signals") or []
+    holdings  = data.get("holdings") or []
+    rebal_list = data.get("rebalancing") or []
+    events    = (data.get("market_events") or data.get("events") or [])[:3]
+    diagnosis = data.get("diagnosis") or []
+    diag = diagnosis[0] if diagnosis else {}
+    rebal = rebal_list[0] if rebal_list else {}
+
+    # 위험 종목 (risk_notice_required)
+    risk_assets = [s["asset_name"] for s in signals
+                   if s.get("risk_notice_required") and s.get("asset_name")][:2]
+    # 손실 종목 (return < 0)
+    loss_assets = [s["asset_name"] for s in signals
+                   if s.get("asset_name") and
+                   float(s.get("valuation_return_rate") or 0) < 0][:2]
+    # 보유 종목 (signals + holdings 합청)
+    held_assets = list(dict.fromkeys(
+        [h["asset_name"] for h in holdings if h.get("asset_name")] +
+        [s["asset_name"] for s in signals if s.get("asset_name")]
+    ))[:3]
+    # 리밸런싱 대상
+    overweight_name = (rebal.get("overweight_assets") or "").split(",")[0].strip() or \
+                      (held_assets[0] if held_assets else "")
+    loss_cut_name   = (rebal.get("loss_cut_candidates") or "").split(",")[0].strip() or \
+                      (loss_assets[0] if loss_assets else "")
+    # 이벤트/섹터
+    top_event_title  = (events[0].get("event_title") or "")[:20] if events else ""
+    top_event_sector = (events[0].get("related_sector") or "") if events else ""
+    top_sector = diag.get("top_concentrated_sector") or top_event_sector or ""
+
+    # 홈퍼 함수
+    def _a(lst, idx=0): return lst[idx] if len(lst) > idx else None
+
+    # --- Layer 1+2: intent별 템플릿 ---
+    TEMPLATES = {
+        "portfolio_diagnosis": [
+            f"{_a(risk_assets)} 왜 위험하다는 거야?" if risk_assets else None,
+            f"{_a(held_assets)} 비중이 너무 높아?" if held_assets else None,
+            f"{_a(loss_assets)} 손절해야 해?" if loss_assets else None,
+            "리밸런싱 지금 해야 해?",
+            f"{top_sector} 섹터 집중도 괴찮아?" if top_sector else None,
+        ],
+        "risk_alert": [
+            f"{_a(risk_assets)} 구체적으로 뒤가 문제야?" if risk_assets else None,
+            f"{_a(risk_assets, 1)} 도 위험해?" if _a(risk_assets, 1) else f"{_a(held_assets, 1)} 도 위험해?" if _a(held_assets, 1) else None,
+            "지금 당장 팬아야 할 게 있어?",
+            "포트폴리오 전체 진단해줘",
+        ],
+        "rebalancing_recommendation": [
+            f"{overweight_name} 줄여야 해?" if overweight_name else None,
+            f"{loss_cut_name} 손절 타이밍 맞아?" if loss_cut_name else None,
+            "리밸런싱 후 어떻게 달라져?",
+            "포트폴리오 진단해줘",
+        ],
+        "holding_risk_check": [
+            f"{_a(risk_assets)} 이 신호 얼마나 심각해?" if risk_assets else None,
+            "지금 당장 팬아야 할 게 있어?",
+            "리밸런싱 추천해줘",
+        ],
+        "portfolio_allocation_summary": [
+            f"{_a(held_assets)} 비중 조정해야 해?" if held_assets else None,
+            "포트폴리오 진단해줘",
+            "위험 종목 있어?",
+        ],
+        "holding_loss_detail": [
+            f"{loss_cut_name} 손절해야 해?" if loss_cut_name else None,
+            "전체 포트폴리오 진단해줘",
+            "리밸런싱 추천해줘",
+        ],
+        "holding_profit_detail": [
+            "수익 실현하면 어디에 재투자해?",
+            "포트폴리오 진단해줘",
+            "리밸런싱 필요해?",
+        ],
+        "market_context_analysis": [
+            f"내 {_a(held_assets)} 이 시장 영향 받아?" if held_assets else "내 포트폴리오 영향 있어?",
+            "위험 종목 알려줘",
+            "리밸런싱 해야 해?",
+        ],
+        "news_disclosure_impact": [
+            f"{top_event_sector} 관련 종목 더 있어?" if top_event_sector else "내 포트폴리오에 영향 있어?",
+            "포트폴리오 진단해줘",
+            "리밸런싱 해야 해?",
+        ],
+        "holding_asset_analysis": [
+            f"{_a(held_assets)} 지금 매도 타이밍이야?" if held_assets else "매도해야 할 종목 있어?",
+            "포트폴리오 진단해줘",
+            "위험 신호 알려줘",
+        ],
+        "investment_change_summary": [
+            f"{_a(held_assets)} 변동 더 자세히 봐줘" if held_assets else None,
+            f"{_a(held_assets, 1)} 는 왜 바뀐었어?" if _a(held_assets, 1) else None,
+            "전체 포트폴리오 진단해줘",
+        ],
+        "investment_change_detail": [
+            f"{_a(held_assets)} 계속 보유해도 돼?" if held_assets else "계속 보유해도 돼?",
+            "위험 신호 있어?",
+            "포트폴리오 전체 진단해줘",
+        ],
+        "market_event_summary": [
+            f"{top_event_title}... 내 종목 영향 있어?" if top_event_title else "내 포트폴리오 영향 있어?",
+            f"{_a(held_assets)} 이 이벤트에 어떻게 영향 받아?" if held_assets else None,
+            "포트폴리오 진단해줘",
+        ],
+        "market_event_detail": [
+            f"{_a(held_assets)} 에 어떤 영향이야?" if held_assets else None,
+            "관련 종목 더 보여줘",
+            "포트폴리오 진단해줘",
+        ],
+        "upcoming_schedule_summary": [
+            "일정 중 제일 중요한 거 몿야?",
+            f"{_a(held_assets)} 관련 일정 있어?" if held_assets else None,
+            "포트폴리오 진단해줘",
+        ],
+        "upcoming_schedule_detail": [
+            "이 일정 전에 대응해야 해?",
+            "관련 종목 변동 알려줘",
+            "포트폴리오 진단해줘",
+        ],
+        "theme_supply_demand": [
+            f"{top_sector} 섹터 지금 사야 해?" if top_sector else None,
+            f"{_a(held_assets)} 외국인 동향 어때?" if held_assets else "외국인 매매 동향 알려줘",
+            "포트폴리오 진단해줘",
+        ],
+        "news_signal_summary": [
+            f"{_a(held_assets)} 관련 뉴스 더 있어?" if held_assets else None,
+            "포트폴리오에 영향 있는 뉴스야?",
+            "포트폴리오 진단해줘",
+        ],
+        "news_signal_detail": [
+            f"{_a(held_assets)} 계속 보유해도 돼?" if held_assets else None,
+            "내 포트폴리오 영향 있어?",
+            "위험 신호 알려줘",
+        ],
+        "expert_movement_detail": [
+            "이 투자 유형 전략 따라가도 될까?",
+            f"{_a(held_assets)} 포함돼 있어?" if held_assets else None,
+            "포트폴리오 진단해줘",
+        ],
+        "expert_type_detail": [
+            "이 유형 포트폴리오 내꺼랑 비교해줘",
+            f"{_a(held_assets)} 어떻게 평가해?" if held_assets else None,
+            "리밸런싱 추천해줘",
+        ],
+    }
+
+    DEFAULT = [
+        f"{_a(held_assets)} 자세히 분석해줘" if held_assets else None,
+        "포트폴리오 진단해줘",
+        "위험 종목 알려줘",
+        "리밸런싱 추천해줘",
+    ]
+
+    raw = [q for q in (TEMPLATES.get(intent) or DEFAULT) if q]
+
+    # --- Layer 3: 대화 히스토리 기반 중복 제거 ---
+    all_asked = {question.strip()} | {h.strip() for h in history}
+
+    def _similar(q: str) -> bool:
+        q_l = q.lower()
+        for asked in all_asked:
+            a_l = asked.lower()
+            if q_l == a_l:
+                return True
+            words = [w for w in q_l.split() if len(w) >= 2]
+            if words and sum(1 for w in words if w in a_l) >= max(1, len(words) // 2):
+                return True
+        return False
+
+    filtered = [q for q in raw if not _similar(q)]
+
+    # 부족하면 기본 보충 (히스토리와 안 겨치는 것만)
+    FALLBACKS = [
+        f"{_a(held_assets)} 분석해줘" if held_assets else "포트폴리오 진단해줘",
+        f"{_a(risk_assets)} 얼마나 위험해?" if risk_assets else "위험 종목 알려줘",
+        "리밸런싱 필요해?",
+        "오늘 시장 어때?",
+    ]
+    for fb in FALLBACKS:
+        if len(filtered) >= 3:
+            break
+        if fb and not _similar(fb) and fb not in filtered:
+            filtered.append(fb)
+
+    return filtered[:3]
+
+
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     """AI PB 챗봇 - V2(LLM) 우선, 실패 시 V1(Genie) fallback"""
@@ -440,11 +634,12 @@ def chat_v2(req: ChatRequest):
         )
         if not decline_msg:
             decline_msg = f"{customer_name}님, 해당 질문은 현재 AI PB가 분석할 수 있는 범위(포트폴리오 진단, 위험 분석, 리밸런싱, 시장 상황)를 벗어나는 것 같아요. 궁금하신 포트폴리오 현황이나 점검 포인트를 안내해드릴게요."
+        decline_followups = generate_smart_followups("portfolio_diagnosis", data or {}, req.question, req.conversation_history)
         return {
             "status": "success",
             "answer": decline_msg,
             "structured": None,
-            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "suggested_questions": decline_followups,
             "v2_meta": {"intent": "decline", "confidence": confidence, "elapsed": time.time() - start},
         }
 
@@ -763,17 +958,8 @@ def chat_v2(req: ChatRequest):
         # %md 등 불필요한 마커 제거
         final_answer = final_answer.replace("\n%md", "").replace("%md", "").replace("% md", "").strip()
 
-        # 이미 한 질문은 추천에서 제외
-        raw_suggestions = _followups.get(intent, ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"])
-        user_q = req.question.strip()
-        suggested = [q for q in raw_suggestions if q != user_q and q not in user_q and user_q not in q]
-        # 3개 미만이면 기본 질문에서 보충
-        _defaults = ["포트폴리오 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"]
-        for d in _defaults:
-            if len(suggested) >= 3:
-                break
-            if d not in suggested and d != user_q and d not in user_q and user_q not in d:
-                suggested.append(d)
+        # 스마트 팔로업 질문 생성 (Layer1+2+3)
+        suggested = generate_smart_followups(intent, data or {}, req.question, req.conversation_history)
 
         # ── Phase 2: card_type / card_data 생성 ─────────────────────────────────
         card_type = None
@@ -834,16 +1020,17 @@ def chat_v2(req: ChatRequest):
             } if chart_sections else None,
             "card_type": card_type,
             "card_data": card_data,
-            "suggested_questions": suggested[:3],
+            "suggested_questions": suggested,
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed},
         }
     else:
         customer_name = req.customer_name or req.customer_id
+        err_followups = generate_smart_followups("portfolio_diagnosis", data or {}, req.question, req.conversation_history)
         return {
             "status": "success",
             "answer": f"{customer_name}님, 요청하신 내용을 분석하는 중 문제가 발생했어요. 다시 한번 질문해주시거나, 아래 추천 질문을 눌러보세요.",
             "structured": None,
-            "suggested_questions": ["내 포트폴리오 종합 진단해줘", "위험 종목 알려줘", "리밸런싱 추천해줘"],
+            "suggested_questions": err_followups,
             "v2_meta": {"intent": intent, "confidence": confidence, "elapsed": elapsed, "error": "composition_failed"},
         }
 
