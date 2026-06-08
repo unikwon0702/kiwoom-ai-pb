@@ -204,13 +204,15 @@ class DBClient:
         return self._execute(f"""
             SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
                    n.related_sector, n.event_summary, n.published_at,
+                   n.scheduled_date,
                    e.headline AS enriched_title,
                    e.sections_json AS enriched_sections
             FROM {self._t('app_cache_news_feed')} n
             LEFT JOIN {self._t('app_cache_enriched_content')} e
               ON n.event_id = e.source_id AND e.content_type = 'schedule_enrichment'
-            WHERE n.event_type IN ('실적발표', '배당', 'ELS상환', '매크로지표')
-            ORDER BY n.sort_timestamp DESC
+            WHERE n.event_type IN ('주총', '배당', 'ELS상환', '매크로지표', '정기공시')
+              AND n.scheduled_date >= CURRENT_DATE()
+            ORDER BY n.scheduled_date ASC
             LIMIT {limit}
         """)
 
