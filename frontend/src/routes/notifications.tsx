@@ -147,7 +147,7 @@ function NotificationsPage() {
   const { customer } = useCustomer();
   const { data: holdingsRaw } = useHoldingSignals(customer.id, 10);
   const { data: marketsRaw } = useMarketEvents(customer.id, 10);
-  const { data: schedulesRaw } = useSchedules(10);
+  const { data: schedulesRaw } = useSchedules(customer.id, 10);
 
   const holdingsItems: Holding[] = (holdingsRaw?.holdings ?? []).map((h: any, i: number) => ({
     tag: h.signal_category === '관심' ? '관심' : '보유',
