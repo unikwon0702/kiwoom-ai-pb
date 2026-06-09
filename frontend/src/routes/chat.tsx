@@ -853,6 +853,56 @@ function CardTypeRenderer({ msg, onItemClick }: { msg: Msg & { role: "bot" }; on
   return null;
 }
 
+/* ===== Animation Helpers ===== */
+// 텍스트에서 GFM 표 블록 위치를 미리 계산
+function buildTableSegments(text: string): { start: number; end: number }[] {
+  const segs: { start: number; end: number }[] = [];
+  const lines = text.split("\n");
+  let ci = 0, i = 0;
+  while (i < lines.length) {
+    if (lines[i].trimStart().startsWith("|")) {
+      const start = ci;
+      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
+        ci += lines[i].length + 1;
+        i++;
+      }
+      segs.push({ start, end: ci });
+    } else {
+      ci += lines[i].length + 1;
+      i++;
+    }
+  }
+  return segs;
+}
+
+// displayedLen 기준으로 표시할 텍스트 반환
+// - 일반 텍스트: 글자 단위 잘라냄
+// - 표 블록: cursor 진입 시 블록 전체 즉시 반환
+function getAnimText(fullText: string, displayedLen: number): string {
+  if (displayedLen >= fullText.length) return fullText;
+  const lines = fullText.split("\n");
+  const out: string[] = [];
+  let ci = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (ci >= displayedLen) break;
+    if (lines[i].trimStart().startsWith("|")) {
+      const block: string[] = [];
+      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
+        block.push(lines[i]);
+        ci += lines[i].length + 1;
+        i++;
+      }
+      i--;
+      out.push(block.join("\n"));
+    } else {
+      const rem = displayedLen - ci;
+      out.push(rem >= lines[i].length ? lines[i] : lines[i].slice(0, rem));
+      ci += lines[i].length + 1;
+    }
+  }
+  return out.join("\n");
+}
+
 /* ===== Loading Message Helper ===== */
 function getLoadingMessages(question: string): string[] {
   const q = question.toLowerCase();
@@ -881,11 +931,11 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
   const isStreamingMsg = !!(msg as any).isStreaming;
   const fullText = msg.text || "";
 
-  // 줄 단위 타이핑 (표 깨짐 방지 + 속도 조절)
-  const textLines = fullText.split("\n");
-  const [displayedLines, setDisplayedLines] = useState(isStreamingMsg ? 0 : textLines.length);
+  // 글자 단위 타이핑 + 표 블록 즉시 완성
+  const [displayedLen, setDisplayedLen] = useState(isStreamingMsg ? 0 : fullText.length);
   const [animDone, setAnimDone] = useState(!isStreamingMsg);
   const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tableSegsRef = useRef<{ start: number; end: number }[]>([]);
 
   // thinking 단계: 0=의도파악, 1=분석중(질문유형별), 2=답변작성중
   const [thinkingPhase, setThinkingPhase] = useState(0);
@@ -896,23 +946,34 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [isThinking]);
 
-  // 줄 단위 타이핑 애니메이션
+  // 글자 단위 타이핑 애니메이션 (표 블록은 진입 즉시 끝까지 점프)
   useEffect(() => {
     if (!isStreamingMsg || !fullText) {
-      setDisplayedLines(textLines.length);
+      setDisplayedLen(fullText.length);
       setAnimDone(true);
       return;
     }
+    tableSegsRef.current = buildTableSegments(fullText);
     let cur = 0;
-    const total = textLines.length;
+    const total = fullText.length;
+    // adaptive chunk: 총 ~120 스텝, 최소 2자
+    const chunk = Math.max(2, Math.ceil(total / 120));
     animTimerRef.current = setInterval(() => {
-      cur = Math.min(cur + 1, total); // 1줄씩
-      setDisplayedLines(cur);
+      cur = Math.min(cur + chunk, total);
+      // 표 블록 진입 시 블록 끝까지 즉시 점프
+      for (const seg of tableSegsRef.current) {
+        if (cur > seg.start && cur < seg.end) {
+          cur = seg.end;
+          break;
+        }
+      }
+      cur = Math.min(cur, total);
+      setDisplayedLen(cur);
       if (cur >= total) {
         setAnimDone(true);
         if (animTimerRef.current) clearInterval(animTimerRef.current);
       }
-    }, 90); // 90ms/줄 → 자연스러운 LLM 타이핑 속도
+    }, 22); // 22ms ≈ 45fps
     return () => { if (animTimerRef.current) clearInterval(animTimerRef.current); };
   }, []); // 마운트 시 1회만
 
@@ -938,7 +999,7 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
 
   // ── 타이핑 중: 줄 단위 ReactMarkdown (표 정상 렌더링) ────────────────────
   if (!animDone) {
-    const displayText = textLines.slice(0, displayedLines).join("\n");
+    const displayText = getAnimText(fullText, displayedLen);
     return (
       <div className="flex justify-start w-full">
         <div className="w-full space-y-3">
