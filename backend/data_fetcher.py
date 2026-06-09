@@ -113,7 +113,7 @@ ALL_SOURCES = [
     {"key": "holdings", "sql": f"SELECT * FROM {SCHEMA}.app_cache_holding_signals WHERE customer_id = '{{cid}}' ORDER BY date DESC, rn ASC LIMIT 10"},
     # Phase 2: 신규 카드 테이블 (실제 존재하는 테이블/컬럼으로 수정)
     {"key": "market_events", "sql": f"SELECT event_id, event_title, event_type, event_subtype, related_sector, related_theme, ai_investment_view, sentiment_score, importance_score, published_at, event_summary, impacted_assets AS impacted_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '뉴스' ORDER BY published_at DESC LIMIT 8"},
-        {"key": "schedule_events", "sql": f"SELECT event_id, event_title, event_type AS d_tag, scheduled_date AS event_date, event_summary AS description, CAST(NULL AS STRING) AS key_points_json, CAST(NULL AS STRING) AS past_cases_json, CAST(NULL AS STRING) AS related_assets_json FROM {SCHEMA}.app_cache_news_feed WHERE event_type IN ('주총', '배당', 'ELS상환', '매크로지표') AND scheduled_date IS NOT NULL AND scheduled_date >= CURRENT_DATE() ORDER BY scheduled_date ASC LIMIT 15"},
+        {"key": "schedule_events", "sql": f"SELECT event_id, event_title, event_type AS d_tag, scheduled_date AS event_date, event_summary AS description, CAST(NULL AS STRING) AS key_points_json, CAST(NULL AS STRING) AS past_cases_json, CAST(NULL AS STRING) AS related_assets_json FROM {SCHEMA}.app_cache_news_feed WHERE event_type IN ('주총', '배당', 'ELS상환', '매크로지표') AND scheduled_date IS NOT NULL AND scheduled_date > CURRENT_DATE() ORDER BY scheduled_date ASC LIMIT 15"},
     {"key": "top_investors", "sql": f"SELECT customer_id AS investor_id, investor_type, latest_trade_date AS signal_date, daily_buys_json AS daily_buy_tickers, daily_sells_json AS daily_sell_tickers, sector_allocation_json, domestic_top_json, overseas_top_json, total_asset_krw, holding_count AS avg_holdings, investor_emoji, short_status, tags_json, total_return_pct FROM {SCHEMA}.app_top_investor_cache ORDER BY rank ASC LIMIT 3"},
     {"key": "news_feed", "sql": f"SELECT news_id, event_id, news_title AS title, event_title, event_subtype AS badge, ai_investment_view AS description, news_summary, event_summary, TO_JSON(tags) AS hashtags_json, related_sector, related_theme, sentiment_score, importance_score, published_at, impacted_assets AS related_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '\ub274\uc2a4' ORDER BY published_at DESC LIMIT 8"},
 ]
@@ -230,19 +230,57 @@ def build_market_event_detail(data: dict, event_title: str = "") -> dict:
 
 def build_upcoming_schedule_summary(data: dict, question: str = "") -> dict:
     """app_cache_schedule_events → UpcomingScheduleSummaryData"""
+    from datetime import date as _date, datetime as _dt
+    import re as _re
     schedules = data.get("schedule_events", [])
+    today = _date.today()
+    _WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+
+    def _d_tag(event_date) -> str:
+        """scheduled_date → 'D-9' 형식"""
+        try:
+            if isinstance(event_date, str):
+                d = _dt.strptime(event_date[:10], "%Y-%m-%d").date()
+            else:
+                d = event_date
+            diff = (d - today).days
+            if diff > 0:   return f"D-{diff}"
+            if diff == 0:  return "D-Day"
+            return f"D+{abs(diff)}"
+        except Exception:
+            return "D-?"
+
+    def _fmt_date(event_date) -> str:
+        """scheduled_date → '06.18 (목)' 형식"""
+        try:
+            if isinstance(event_date, str):
+                d = _dt.strptime(event_date[:10], "%Y-%m-%d").date()
+            else:
+                d = event_date
+            wd = _WEEKDAY_KR[d.weekday()]
+            return f"{d.month:02d}.{d.day:02d}. ({wd})"
+        except Exception:
+            return str(event_date)[:10] if event_date else ""
+
     items = []
-    for s in schedules[:5]:
+    for s in schedules[:8]:
+        event_date = s.get("event_date")
         items.append({
             "event_id": str(s.get("event_id", "")),
             "title": s.get("event_title", ""),
-            "d_tag": s.get("d_tag", "D+?"),
-            "date": s.get("event_date", ""),
+            "d_tag": _d_tag(event_date),
+            "date": _fmt_date(event_date),
             "desc": s.get("description", ""),
         })
+
+    # 중요 이벤트 강조 (매크로지표 우선)
+    macro = [it for it in items if any(kw in it["title"] for kw in ["FOMC","금리","CPI","GDP","연준"])]
+    others = [it for it in items if it not in macro]
+    sorted_items = (macro + others)[:5]
+
     return {
         "ai_summary": f"{len(items)}개의 주요 일정을 확인하세요.",
-        "items": items,
+        "items": sorted_items,
     }
 
 
