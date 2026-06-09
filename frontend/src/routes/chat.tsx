@@ -404,7 +404,7 @@ function ChatPage() {
                 </div>
               ) : m.role === "bot" && m.isAnnouncement ? (
                 <AnnouncementMessage key={i} text={m.text} />
-              ) : <BotMessage key={i} msg={m} customerName={customer.name} onSend={sendQuestion} isLast={i === messages.length - 1} />)}
+              ) : <BotMessage key={`${i}-${(m as any).isThinking ? "thinking" : "msg"}`} msg={m} customerName={customer.name} onSend={sendQuestion} isLast={i === messages.length - 1} />)}
               <div ref={endRef} />
             </div>
           )}
@@ -954,6 +954,7 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
   const charts = msg.tableData ? buildCharts(msg.tableData) : [];
 
   return (
+  <>
     <div className="flex justify-start w-full">
       <div className="w-full space-y-3">
         {/* Main Answer Card with Markdown */}
@@ -1130,9 +1131,10 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
           </p>
         )}
       </div>
-      {/* 후속 질문 — 마지막 메시지, 애니메이션 완료 후 */}
-      {isLast && (msg.followUps?.length ?? 0) > 0 && <FollowUpQuestions questions={msg.followUps!} onSelect={onSend} />}
     </div>
+    {/* 후속 질문 — flex 컨테이너 바깥에 배치, 마지막 메시지 + 애니메이션 완료 후 */}
+    {isLast && animDone && (msg.followUps?.length ?? 0) > 0 && <FollowUpQuestions questions={msg.followUps!} onSelect={onSend} />}
+  </>
   );
 }
 
