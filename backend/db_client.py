@@ -202,37 +202,172 @@ class DBClient:
         """)
 
     # ============================================================
-    # Schedules [화면4] + enriched content JOIN
+    # Schedules [화면4] — 3-레이어 통합 쿼리
+    # 레이어1: 고객 보유 파생결합증권 조기상환 가능 (gd_signal_bundle_serving)
+    # 레이어2: 고객 보유 종목 관련 주총/배당 (app_cache_news_feed, 노이즈 제거)
+    # 레이어3: 매크로 고중요도 일정 (upcoming_macro_calendar)
     # ============================================================
-    def get_schedules(self, limit: int = 10) -> list[dict]:
+    def get_schedules(self, customer_id: str = 'CUST0010', limit: int = 10) -> list[dict]:
         return self._execute(f"""
-            SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
-                   n.related_sector, n.event_summary, n.published_at,
-                   n.scheduled_date,
-                   e.headline AS enriched_title,
-                   e.sections_json AS enriched_sections
-            FROM {self._t('app_cache_news_feed')} n
-            LEFT JOIN {self._t('app_cache_enriched_content')} e
-              ON n.event_id = e.source_id AND e.content_type = 'schedule_enrichment'
-            WHERE n.event_type IN ('주총', '배당', 'ELS상환', '매크로지표')
-              AND n.scheduled_date >= CURRENT_DATE()
-            ORDER BY n.scheduled_date ASC
+            WITH customer_assets AS (
+                SELECT DISTINCT asset_name
+                FROM {self._t('app_cache_holding_signals')}
+                WHERE customer_id = '{customer_id}'
+            ),
+            -- 레이어1: 조기상환 가능 파생결합증권 (signal 기반, 7일 내 평가일 추정)
+            layer_els AS (
+                SELECT
+                    s.asset_name AS event_id,
+                    s.asset_name AS event_title,
+                    'ELS상환'    AS event_type,
+                    '조기상환'   AS event_subtype,
+                    s.interpretation AS event_summary,
+                    NULL AS related_sector,
+                    DATE_ADD(CURRENT_DATE(), 7) AS scheduled_date,
+                    NULL AS enriched_title,
+                    NULL AS enriched_sections,
+                    1 AS layer_priority,
+                    ROW_NUMBER() OVER (PARTITION BY s.asset_name ORDER BY s.signal_date DESC) AS rn
+                FROM dev.ai_pb_gold.gd_signal_bundle_serving s
+                INNER JOIN customer_assets ca ON s.asset_name = ca.asset_name
+                WHERE s.signal_code = 'EARLY_REDEMPTION_LIKELY'
+            ),
+            -- 레이어2: 고객 보유 종목 관련 주총/배당 (행정공시 노이즈 제거)
+            layer_news AS (
+                SELECT
+                    n.event_id,
+                    n.event_title,
+                    n.event_type,
+                    n.event_subtype,
+                    n.event_summary,
+                    n.related_sector,
+                    n.scheduled_date,
+                    e.headline AS enriched_title,
+                    e.sections_json AS enriched_sections,
+                    2 AS layer_priority,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY n.event_title, n.scheduled_date
+                        ORDER BY n.published_at DESC
+                    ) AS rn
+                FROM {self._t('app_cache_news_feed')} n
+                LEFT JOIN {self._t('app_cache_enriched_content')} e
+                    ON n.event_id = e.source_id AND e.content_type = 'schedule_enrichment'
+                WHERE n.event_type IN ('주총', '배당')
+                  AND n.scheduled_date >= CURRENT_DATE()
+                  AND n.scheduled_date <= DATE_ADD(CURRENT_DATE(), 60)
+                  AND n.event_subtype NOT LIKE '%투자설명서%'
+                  AND n.event_subtype NOT LIKE '%기재정정%'
+                  AND EXISTS (
+                      SELECT 1 FROM customer_assets ca
+                      WHERE n.event_title LIKE CONCAT('%', ca.asset_name, '%')
+                  )
+            ),
+            -- 레이어3: 매크로 고중요도 일정
+            layer_macro AS (
+                SELECT
+                    event_id,
+                    event_title,
+                    event_type,
+                    event_subtype,
+                    event_summary,
+                    related_sector,
+                    scheduled_date,
+                    NULL AS enriched_title,
+                    NULL AS enriched_sections,
+                    3 AS layer_priority,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY event_title, scheduled_date
+                        ORDER BY scheduled_date ASC
+                    ) AS rn
+                FROM dev.ai_pb_gold.upcoming_macro_calendar
+                WHERE scheduled_date >= CURRENT_DATE()
+                  AND scheduled_date <= DATE_ADD(CURRENT_DATE(), 30)
+                  AND importance = 'high'
+            ),
+            combined AS (
+                SELECT event_id, event_title, event_type, event_subtype,
+                       event_summary, related_sector, scheduled_date,
+                       enriched_title, enriched_sections, layer_priority
+                FROM layer_els  WHERE rn = 1
+                UNION ALL
+                SELECT event_id, event_title, event_type, event_subtype,
+                       event_summary, related_sector, scheduled_date,
+                       enriched_title, enriched_sections, layer_priority
+                FROM layer_news WHERE rn = 1
+                UNION ALL
+                SELECT event_id, event_title, event_type, event_subtype,
+                       event_summary, related_sector, scheduled_date,
+                       enriched_title, enriched_sections, layer_priority
+                FROM layer_macro WHERE rn = 1
+            )
+            SELECT *
+            FROM combined
+            ORDER BY layer_priority ASC, scheduled_date ASC
             LIMIT {limit}
         """)
 
 
     # ============================================================
-    # Schedule Detail (일정 상세 팝업 — enriched > 캐시 > FM)
+    # Schedule Detail (일정 상세 팝업 — UpcomingScheduleDetailContent 포맷)
     # ============================================================
     def get_schedule_detail(self, event_id: str) -> dict:
-        """일정 이벤트 상세: enriched_content 우선, 없으면 ai_investment_view, 최후 FM"""
         import json as _json
-        from datetime import date as _date
+        from datetime import date as _date, datetime as _datetime, timedelta
 
+        def _calc_d_tag(sd):
+            try:
+                if isinstance(sd, str):
+                    sd = _datetime.strptime(sd[:10], '%Y-%m-%d').date()
+                diff = (sd - _date.today()).days
+                return (f"D-{diff}" if diff > 0 else "D-Day" if diff == 0 else f"D+{abs(diff)}"), sd
+            except:
+                return "D-?", None
+
+        def _fmt_date(sd):
+            try:
+                if isinstance(sd, str):
+                    sd = _datetime.strptime(sd[:10], '%Y-%m-%d').date()
+                WEEKDAY_KO = ['월', '화', '수', '목', '금', '토', '일']
+                return f"{sd.month}/{sd.day}({WEEKDAY_KO[sd.weekday()]})"
+            except:
+                return ''
+
+        # 레이어1 ELS/DLB: event_id가 자산명 (signal 기반)
+        sig_row = self._execute(f"""
+            SELECT DISTINCT asset_name, interpretation, signal_date
+            FROM dev.ai_pb_gold.gd_signal_bundle_serving
+            WHERE asset_name = '{event_id}'
+              AND signal_code = 'EARLY_REDEMPTION_LIKELY'
+            LIMIT 1
+        """)
+        if sig_row:
+            sig = sig_row[0]
+            eval_date = _date.today() + timedelta(days=7)
+            return {
+                "d_tag": "D-7",
+                "date": _fmt_date(eval_date),
+                "title": sig['asset_name'],
+                "summary": "조기상환 평가일이 다가오고 있어요",
+                "summary_icon": "⏰",
+                "summary_label": "조기상환 안내",
+                "ai_summary": sig.get('interpretation') or "조기상환 확률이 높은 구간이에요",
+                "summary_sub": "기초자산 종가 확인 후 상환 여부가 결정돼요",
+                "reasons_icon": "💡",
+                "reasons_label": "이 일정에서 주목할 점",
+                "key_points": [
+                    "조기상환 기준가 대비 현재 가격 확인이 필요해요",
+                    "상환될 경우 수익금과 원금이 함께 지급돼요",
+                    "미상환 시 다음 평가일까지 계속 보유하게 돼요",
+                ],
+                "past_cases": [],
+                "related_assets": [],
+            }
+
+        # 레이어2~3: 일반 이벤트 (app_cache_news_feed)
         row = self._execute(f"""
             SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
                    n.related_sector, n.event_summary, n.ai_investment_view,
-                   n.scheduled_date, n.relevance_to_user, n.importance_score,
+                   n.scheduled_date, n.importance_score,
                    e.sections_json AS enriched_sections
             FROM {self._t('app_cache_news_feed')} n
             LEFT JOIN {self._t('app_cache_enriched_content')} e
@@ -241,120 +376,111 @@ class DBClient:
             LIMIT 1
         """)
         if not row:
+            # upcoming_macro_calendar에서 조회
+            row = self._execute(f"""
+                SELECT event_id, event_title, event_type, event_subtype,
+                       related_sector, event_summary,
+                       NULL AS ai_investment_view, scheduled_date,
+                       NULL AS importance_score, NULL AS enriched_sections
+                FROM dev.ai_pb_gold.upcoming_macro_calendar
+                WHERE event_id = '{event_id}'
+                LIMIT 1
+            """)
+        if not row:
             return {}
+
         event = row[0]
+        d_tag, _ = _calc_d_tag(event.get('scheduled_date'))
+        date_str = _fmt_date(event.get('scheduled_date')) if event.get('scheduled_date') else ''
 
-        # D-day 계산
-        d_tag = "D-?"
-        if event.get('scheduled_date'):
-            try:
-                sd = event['scheduled_date']
-                if isinstance(sd, str):
-                    from datetime import datetime
-                    sd = datetime.strptime(sd[:10], '%Y-%m-%d').date()
-                diff = (sd - _date.today()).days
-                d_tag = f"D-{diff}" if diff > 0 else "D-Day" if diff == 0 else f"D+{abs(diff)}"
-            except:
-                pass
-
-        # enriched content 우선 사용
+        # enriched_sections 우선
         if event.get('enriched_sections'):
             try:
                 sec = _json.loads(event['enriched_sections'])
                 return {
-                    "tag": d_tag,
+                    "d_tag": d_tag,
+                    "date": date_str,
                     "title": sec.get('title_friendly', event['event_title']),
-                    "summaryIcon": "🤖",
-                    "summaryLabel": "AI 이벤트 요약",
-                    "summary": sec.get('summary', event.get('ai_investment_view', '')),
-                    "summarySub": sec.get('summarySub', event.get('event_summary', '')),
-                    "reasonsIcon": "📣",
-                    "reasonsLabel": "무슨 일이 일어날까?",
-                    "reasons": sec.get('reasons', [event.get('ai_investment_view', '')]),
-                    "sources": sec.get('sources', []),
-                    "hideMasters": True,
-                    "history": sec.get('history', None),
+                    "summary": sec.get('summary', ''),
+                    "summary_icon": "🤖",
+                    "summary_label": "AI 이벤트 요약",
+                    "ai_summary": sec.get('ai_summary') or sec.get('summary', event.get('ai_investment_view', '')),
+                    "summary_sub": sec.get('summarySub', event.get('event_summary', '')),
+                    "reasons_icon": "💡",
+                    "reasons_label": "이 일정에서 주목할 점",
+                    "key_points": sec.get('key_points') or sec.get('reasons', []),
+                    "past_cases": sec.get('past_cases', []),
+                    "related_assets": sec.get('related_assets', []),
                 }
             except:
                 pass
 
-        # 캐시 확인 (ai_investment_view가 채워져 있으면)
-        if event.get('ai_investment_view'):
-            ai_view = event['ai_investment_view']
-            return {
-                "tag": d_tag,
-                "title": event['event_title'],
-                "summaryIcon": "🤖",
-                "summaryLabel": "AI 이벤트 요약",
-                "summary": ai_view,
-                "summarySub": event.get('event_summary', ''),
-                "reasonsIcon": "📣",
-                "reasonsLabel": "무슨 일이 일어날까?",
-                "reasons": [ai_view],
-                "sources": [],
-                "hideMasters": True,
-                "history": None,
-            }
-
         # FM 호출 (캐시 없을 때)
+        ai_view = event.get('ai_investment_view', '')
         try:
-            ai_response = self._generate_schedule_opinion(event)
+            ai_resp = self._generate_schedule_opinion(event, d_tag)
             return {
-                "tag": d_tag,
+                "d_tag": d_tag,
+                "date": date_str,
                 "title": event['event_title'],
-                "summaryIcon": "🤖",
-                "summaryLabel": "AI 이벤트 요약",
-                "summary": ai_response.get('summary', event['event_title']),
-                "summarySub": ai_response.get('summarySub', event.get('event_summary', '')),
-                "reasonsIcon": "📣",
-                "reasonsLabel": "무슨 일이 일어날까?",
-                "reasons": ai_response.get('reasons', [event.get('relevance_to_user', '일정이 다가오고 있어요.')]),
-                "sources": ai_response.get('sources', []),
-                "hideMasters": True,
-                "history": None,
+                "summary": ai_view[:60] if ai_view else event.get('event_summary', ''),
+                "summary_icon": "🤖",
+                "summary_label": "AI 이벤트 요약",
+                "ai_summary": ai_resp.get('ai_summary', ai_view),
+                "summary_sub": ai_resp.get('summary_sub', event.get('event_summary', '')),
+                "reasons_icon": "💡",
+                "reasons_label": "이 일정에서 주목할 점",
+                "key_points": ai_resp.get('key_points', [ai_view] if ai_view else []),
+                "past_cases": ai_resp.get('past_cases', []),
+                "related_assets": [],
             }
-        except Exception as e:
-            # FM 실패 시 기본 템플릿
+        except:
+            summary_text = ai_view[:60] if ai_view else event.get('event_summary', f"{event['event_title']} 일정이에요.")
             return {
-                "tag": d_tag,
+                "d_tag": d_tag,
+                "date": date_str,
                 "title": event['event_title'],
-                "summaryIcon": "🤖",
-                "summaryLabel": "AI 이벤트 요약",
-                "summary": event.get('relevance_to_user', f"{event['event_title']} 일정이 다가오고 있어요."),
-                "summarySub": event.get('event_summary', ''),
-                "reasonsIcon": "📣",
-                "reasonsLabel": "무슨 일이 일어날까?",
-                "reasons": [event.get('relevance_to_user', '해당 일정에 주의가 필요해요.')],
-                "sources": [],
-                "hideMasters": True,
-                "history": None,
+                "summary": summary_text,
+                "summary_icon": "🤖",
+                "summary_label": "AI 이벤트 요약",
+                "ai_summary": ai_view or f"{event['event_title']} 일정이 다가오고 있어요.",
+                "summary_sub": event.get('event_summary', ''),
+                "reasons_icon": "💡",
+                "reasons_label": "이 일정에서 주목할 점",
+                "key_points": [ai_view] if ai_view else ["해당 일정에 주의가 필요해요."],
+                "past_cases": [],
+                "related_assets": [],
             }
 
-    def _generate_schedule_opinion(self, event: dict) -> dict:
-        """FM 모델로 일정 이벤트 AI 의견 생성"""
+    def _generate_schedule_opinion(self, event: dict, d_tag: str = 'D-?') -> dict:
+        """FM 모델로 일정 이벤트 AI 의견 생성 (UpcomingScheduleDetailContent 포맷)"""
         import json as _json
         from databricks.sdk import WorkspaceClient
 
         w = WorkspaceClient()
-        sector = event.get('related_sector', '')
-        prompt = f"""아래 투자 일정 이벤트에 대해 설명해주세요:
+        prompt = f"""아래 투자 일정 이벤트를 분석해주세요:
 - 이벤트: {event['event_title']}
-- 타입: {event.get('event_type', '')} ({event.get('event_subtype', '')})
-- 관련섹터: {sector}
-- 중요도: {event.get('importance_score', 'medium')}
+- 타입: {event.get('event_type', '')} / {event.get('event_subtype', '')}
+- 관련섹터: {event.get('related_sector', '')}
+- D-day: {d_tag}
 
-반드시 아래 JSON 형식으로만 응답하세요:
-{{"summary": "한줄 요약 (25자 이내, 존댓말)", "summarySub": "부연 설명 (40자 이내, 존댓말)", "reasons": ["무슨 일이 일어날 수 있는지 시나리오1 (존댓말)", "시나리오2 (존댓말)"], "sources": ["관련 출처1"]}}"""
+반드시 아래 JSON 형식으로만 응답하세요 (한국어, 존댓말):
+{{
+  "ai_summary": "핵심 요약 1문장 (30자 이내)",
+  "summary_sub": "부연 설명 1문장 (50자 이내)",
+  "key_points": ["주목 포인트1 (20자 이내)", "포인트2", "포인트3"],
+  "past_cases": [{{"date": "YYYY.MM", "result": "과거 유사 사례 (40자 이내)"}}]
+}}"""
 
         response = w.api_client.do(
             "POST",
-            "/serving-endpoints/databricks-gpt-5-4-mini/invocations",
+            "/serving-endpoints/databricks-claude-sonnet-4/invocations",
             body={
                 "messages": [
-                    {"role": "system", "content": "당신은 증권사 AI PB입니다. 고객에게 투자 일정을 친절하고 간결하게 설명합니다. 반드시 JSON으로만 응답하세요. 한국어로 답변하세요."},
+                    {"role": "system", "content": "당신은 키움증권 AI PB입니다. 고객에게 투자 일정을 친절하고 실질적으로 설명합니다. JSON으로만 응답하세요."},
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 300,
+                "max_tokens": 600,
                 "temperature": 0.3
             }
         )

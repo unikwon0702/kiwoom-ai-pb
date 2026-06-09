@@ -41,8 +41,8 @@ export function useMarketEvents(customerId = 'CUST0010', limit = 5) {
 }
 
 // ===== Schedules =====
-export function useSchedules(limit = 10) {
-  return useFetch(() => api.getSchedules(limit), [limit]);
+export function useSchedules(customerId = 'CUST0010', limit = 10) {
+  return useFetch(() => api.getSchedules(customerId, limit), [customerId, limit]);
 }
 
 // ===== Market Overview =====

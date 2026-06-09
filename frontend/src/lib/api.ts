@@ -49,8 +49,8 @@ export const api = {
     return request<{ markets: any[] }>(`/market-overview${q}`);
   },
 
-  getSchedules: (limit = 10) =>
-    request<{ schedules: any[] }>(`/schedules?limit=${limit}`),
+  getSchedules: (customerId = 'CUST0010', limit = 10) =>
+    request<{ schedules: any[] }>(`/schedules?customer_id=${customerId}&limit=${limit}`),
 
   getCustomerAlerts: (customerId?: string, priority?: string) => {
     const params = new URLSearchParams();

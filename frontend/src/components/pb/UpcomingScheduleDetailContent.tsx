@@ -1,12 +1,17 @@
 import { X, Calendar } from "lucide-react";
+import { AiChatCta } from "./AiChatCta";
+import { useNavigate } from "@tanstack/react-router";
 
 export type UpcomingScheduleDetailContentProps = {
   data: any;
   inChat?: boolean;
   onClose?: () => void;
+  onGoChat?: () => void;
 };
 
-export function UpcomingScheduleDetailContent({ data, inChat = false, onClose }: UpcomingScheduleDetailContentProps) {
+export function UpcomingScheduleDetailContent({ data, inChat = false, onClose, onGoChat }: UpcomingScheduleDetailContentProps) {
+  const navigate = useNavigate();
+  const handleGoChat = onGoChat ?? (() => navigate({ to: "/chat", search: {} }));
   if (!data) return null;
 
   const keyPoints: string[] = data.key_points ?? [];
@@ -14,6 +19,7 @@ export function UpcomingScheduleDetailContent({ data, inChat = false, onClose }:
   const relatedAssets: { asset_name: string; reason: string }[] = data.related_assets ?? [];
 
   return (
+    <>
     <div className={inChat ? "px-6 pt-4 pb-3 space-y-6" : "px-6 pt-4 pb-3 space-y-6 max-h-[78vh] overflow-y-auto"}>
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-3">
@@ -113,5 +119,11 @@ export function UpcomingScheduleDetailContent({ data, inChat = false, onClose }:
         </section>
       )}
     </div>
+
+    {/* AI PB 채팅 CTA */}
+    {!inChat && (
+      <AiChatCta onClick={handleGoChat} />
+    )}
+    </>
   );
 }

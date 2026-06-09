@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { tagClassName } from "./tag-style";
 import { HoldingDetailDialog } from "./HoldingDetailDialog";
+import { UpcomingScheduleDetailDialog } from "./UpcomingScheduleDetailDialog";
 import { MarketEventDetailDialog } from "./MarketEventDetailDialog";
 import { useHoldingSignals, useMarketEvents, useSchedules, useSituationSummary } from "@/hooks/useApiData";
 import { useCustomer } from "@/lib/customer-context";
@@ -83,7 +84,7 @@ type Schedule = {
 function useCurrentSituationData(customerId: string): { holdings: Holding[]; markets: Market[]; schedules: Schedule[]; loading: boolean } {
   const { data: holdingsData, loading: hLoading } = useHoldingSignals(customerId, 5);
   const { data: marketsData, loading: mLoading } = useMarketEvents(customerId, 3);
-  const { data: schedulesData, loading: sLoading } = useSchedules(3);
+  const { data: schedulesData, loading: sLoading } = useSchedules(customerId, 3);
 
   const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => {
     // enriched_sections가 있으면 구어체 사용
@@ -261,9 +262,12 @@ export function CurrentSituation() {
   const { customer } = useCustomer();
   const { holdings, markets, schedules, loading } = useCurrentSituationData(customer.id);
   const { data: situationData } = useSituationSummary(customer.id);
-  const [activeHolding, setActiveHolding] = useState<{ type: 'holding' | 'schedule'; key: string } | null>(null);
+  const [activeHolding, setActiveHolding] = useState<{ type: 'holding'; key: string } | null>(null);
   const [holdingDetailProps, setHoldingDetailProps] = useState<any>(null);
   const [holdingDetailLoading, setHoldingDetailLoading] = useState(false);
+  const [activeScheduleId, setActiveScheduleId] = useState<string | null>(null);
+  const [scheduleDetailProps, setScheduleDetailProps] = useState<any>(null);
+  const [scheduleDetailLoading, setScheduleDetailLoading] = useState(false);
 
   const [prefetchCache, setPrefetchCache] = useState<Record<string, any>>({});
 
@@ -321,8 +325,29 @@ export function CurrentSituation() {
   };
 
 
+  // 일정 상세 저장 후 UpcomingScheduleDetailDialog 표시
+  useEffect(() => {
+    if (!activeScheduleId) {
+      setScheduleDetailProps(null);
+      return;
+    }
+    const cached = prefetchCache[`sched_${activeScheduleId}`];
+    if (cached) {
+      setScheduleDetailProps(cached);
+      return;
+    }
+    setScheduleDetailLoading(true);
+    api.getScheduleDetail(activeScheduleId)
+      .then((data) => {
+        setScheduleDetailProps(data);
+        setPrefetchCache((prev) => ({ ...prev, [`sched_${activeScheduleId}`]: data }));
+      })
+      .catch(() => setScheduleDetailProps(null))
+      .finally(() => setScheduleDetailLoading(false));
+  }, [activeScheduleId, prefetchCache]);
+
   const handleScheduleClick = (it: Schedule) => {
-    setActiveHolding({ type: 'schedule', key: it.eventId });
+    setActiveScheduleId(it.eventId);
   };
 
   return (
@@ -358,12 +383,8 @@ export function CurrentSituation() {
         </Section>
       </div>
             {(() => {
-        const scheduleProps: Record<string, any> = {};
-
         if (!activeHolding) return null;
-
-        // 데이터 없으면 스피너 표시 (holding: holdingDetailProps, schedule: prefetchCache)
-        if (activeHolding.type === 'holding' && !holdingDetailProps) {
+        if (!holdingDetailProps) {
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-3">
@@ -373,28 +394,12 @@ export function CurrentSituation() {
             </div>
           );
         }
-
-        if (activeHolding.type === 'schedule' && !prefetchCache[`sched_${activeHolding.key}`]) {
-          return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-              <div className="flex flex-col items-center gap-3">
-                <div className="size-8 rounded-full border-2 border-foreground/20 border-t-foreground animate-spin" />
-                <span className="text-[13px] text-muted-foreground font-medium">AI 분석 중...</span>
-              </div>
-            </div>
-          );
-        }
-
-        const props = activeHolding.type === 'schedule'
-          ? prefetchCache[`sched_${activeHolding.key}`] ?? {}
-          : holdingDetailProps ?? {};
-
         return (
           <HoldingDetailDialog
             key={activeHolding.key}
             open={true}
             onOpenChange={(o) => { if (!o) setActiveHolding(null); }}
-            {...props}
+            {...holdingDetailProps}
           />
         );
       })()}
@@ -402,6 +407,12 @@ export function CurrentSituation() {
         open={!!activeMarketEventId}
         onOpenChange={(o) => { if (!o) setActiveMarketEventId(null); }}
         eventId={activeMarketEventId}
+      />
+      <UpcomingScheduleDetailDialog
+        open={!!activeScheduleId}
+        onOpenChange={(o) => { if (!o) { setActiveScheduleId(null); setScheduleDetailProps(null); } }}
+        data={scheduleDetailProps}
+        loading={scheduleDetailLoading}
       />
     </div>
   );

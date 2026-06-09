@@ -90,9 +90,12 @@ def get_market_overview(segment: str = Query(default=None)):
 
 
 @app.get("/api/schedules")
-def get_schedules(limit: int = Query(default=10, le=30)):
-    """[화면4] 다가오는 일정"""
-    return {"schedules": db.get_schedules(limit)}
+def get_schedules(
+    customer_id: str = Query(default="CUST0010"),
+    limit: int = Query(default=10, le=30)
+):
+    """[화면4] 다가오는 일정 (고객 맞정)"""
+    return {"schedules": db.get_schedules(customer_id, limit)}
 
 
 @app.get("/api/customer-alerts")
