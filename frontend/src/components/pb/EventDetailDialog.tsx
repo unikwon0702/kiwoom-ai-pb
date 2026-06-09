@@ -1,9 +1,12 @@
 import { Drawer, DrawerPortal, DrawerOverlay } from "@/components/ui/drawer";
 import { Drawer as DrawerPrimitive } from "vaul";
-import { X, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Minus, ChevronDown, Info } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { tagClassName } from "@/components/pb/tag-style";
 import { api } from "@/lib/api";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AiChatCta } from "./AiChatCta";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; eventId: string | null };
 
@@ -35,9 +38,11 @@ function impactColor(direction: string) {
 }
 
 export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
+  const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [activeSector, setActiveSector] = useState(0);
+  const [showIndirect, setShowIndirect] = useState(false);
 
   useEffect(() => {
     if (!open || !eventId) return;

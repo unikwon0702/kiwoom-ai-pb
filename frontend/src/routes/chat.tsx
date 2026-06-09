@@ -234,8 +234,30 @@ function ChatPage() {
   const [hasAutoPromptRun, setHasAutoPromptRun] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
+  const autoScrollRef = useRef(true);  // 자동 스크롤 활성화 여부
+  const lastScrollY = useRef(0);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  // 사용자 스크롤 감지: 위로 올리면 자동 스크롤 OFF, 하단 복귀 시 ON
+  useEffect(() => {
+    const onScroll = () => {
+      const nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 100);
+      if (nearBottom) {
+        autoScrollRef.current = true;
+      } else if (window.scrollY < lastScrollY.current - 10) {
+        autoScrollRef.current = false;
+      }
+      lastScrollY.current = window.scrollY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // 메시지 추가 시 자동 스크롤
+  useEffect(() => {
+    if (autoScrollRef.current) {
+      endRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length]);
 
 
 
@@ -316,6 +338,7 @@ function ChatPage() {
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
     // 사용자 메시지 + thinking 버블 즉시 표시
+    autoScrollRef.current = true; // 새 질문 전송 시 자동 스크롤 복원
     setMessages(p => [...p, { role: "user", text }, { role: "bot", text: text, isThinking: true }]);
     setLoading(true);
     // history auto-saved by useEffect (multi-session)
@@ -405,7 +428,7 @@ function ChatPage() {
               ) : m.role === "bot" && m.isAnnouncement ? (
                 <AnnouncementMessage key={i} text={m.text} />
               ) : <BotMessage key={`${i}-${(m as any).isThinking ? "thinking" : "msg"}`} msg={m} customerName={customer.name} onSend={sendQuestion} isLast={i === messages.length - 1} />)}
-              <div ref={endRef} />
+              <div ref={endRef} id="aipb-chat-end" />
             </div>
           )}
         </main>
@@ -956,8 +979,8 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
     tableSegsRef.current = buildTableSegments(fullText);
     let cur = 0;
     const total = fullText.length;
-    // adaptive chunk: 총 ~120 스텝, 최소 2자
-    const chunk = Math.max(2, Math.ceil(total / 120));
+    // adaptive chunk: 총 ~200 스텝, 최소 1자 (실제 LLM 타이핑 속도)
+    const chunk = Math.max(1, Math.ceil(total / 200));
     animTimerRef.current = setInterval(() => {
       cur = Math.min(cur + chunk, total);
       // 표 블록 진입 시 블록 끝까지 즉시 점프
@@ -973,9 +996,18 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
         setAnimDone(true);
         if (animTimerRef.current) clearInterval(animTimerRef.current);
       }
-    }, 22); // 22ms ≈ 45fps
+    }, 35); // 35ms ≈ 실제 LLM 스트리밍 속도 (~40-60 chars/sec)
     return () => { if (animTimerRef.current) clearInterval(animTimerRef.current); };
   }, []); // 마운트 시 1회만
+
+  // 타이핑 중 자동 스크롤 (isLast 메시지만, 사용자 스크롤 우선)
+  useEffect(() => {
+    if (!isLast || animDone || !isStreamingMsg) return;
+    const endEl = document.getElementById("aipb-chat-end");
+    if (!endEl) return;
+    const nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 120);
+    if (nearBottom) endEl.scrollIntoView({ behavior: "instant" });
+  }, [displayedLen]);
 
   // ── 생각 중 버블 (단계별 상태 메시지) ──────────────────────────────────
   if (isThinking) {
