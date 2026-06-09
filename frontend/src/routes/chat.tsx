@@ -316,7 +316,7 @@ function ChatPage() {
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
     // 사용자 메시지 + thinking 버블 즉시 표시
-    setMessages(p => [...p, { role: "user", text }, { role: "bot", text: "", isThinking: true }]);
+    setMessages(p => [...p, { role: "user", text }, { role: "bot", text: text, isThinking: true }]);
     setLoading(true);
     // history auto-saved by useEffect (multi-session)
     try {
@@ -853,45 +853,79 @@ function CardTypeRenderer({ msg, onItemClick }: { msg: Msg & { role: "bot" }; on
   return null;
 }
 
+/* ===== Loading Message Helper ===== */
+function getLoadingMessages(question: string): string[] {
+  const q = question.toLowerCase();
+  let phase2 = "데이터를 불러오는 중이예요";
+  if (q.includes("포트폴리오") || q.includes("진단") || q.includes("리밸런싱") || q.includes("수익률")) {
+    phase2 = "포트폴리오를 분석중이예요";
+  } else if (q.includes("뉴스") || q.includes("시황") || q.includes("의외") || q.includes("신호")) {
+    phase2 = "시장 뉴스를 분석중이예요";
+  } else if (q.includes("일정") || q.includes("fomc") || q.includes("금리") || q.includes("주총") || q.includes("실적")) {
+    phase2 = "투자 일정을 확인중이예요";
+  } else if (q.includes("고수") || q.includes("전문가") || q.includes("움직임")) {
+    phase2 = "고수들의 움직임을 분석중이예요";
+  } else if (q.includes("위험") || q.includes("리스크") || q.includes("위기") || q.includes("경고")) {
+    phase2 = "리스크 신호를 점검중이예요";
+  } else if (q.includes("종목") || q.includes("보유") || q.includes("변동")) {
+    phase2 = "보유 종목을 분석중이예요";
+  } else if (q.includes("자산") || q.includes("배분") || q.includes("비중")) {
+    phase2 = "자산 배분을 분석중이예요";
+  }
+  return ["질문의 의도를 파악중이예요", phase2, "답변을 작성하고있어요"];
+}
+
 /* ===== Bot Message ===== */
 function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & { role: "bot" }; customerName: string; onSend: (q: string) => void; isLast?: boolean }) {
   const isThinking = !!(msg as any).isThinking;
   const isStreamingMsg = !!(msg as any).isStreaming;
   const fullText = msg.text || "";
 
-  const [displayedLen, setDisplayedLen] = useState(isStreamingMsg ? 0 : fullText.length);
+  // 줄 단위 타이핑 (표 깨짐 방지 + 속도 조절)
+  const textLines = fullText.split("\n");
+  const [displayedLines, setDisplayedLines] = useState(isStreamingMsg ? 0 : textLines.length);
   const [animDone, setAnimDone] = useState(!isStreamingMsg);
   const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // thinking 단계: 0=의도파악, 1=분석중(질문유형별), 2=답변작성중
+  const [thinkingPhase, setThinkingPhase] = useState(0);
+  useEffect(() => {
+    if (!isThinking) return;
+    const t1 = setTimeout(() => setThinkingPhase(1), 1800);
+    const t2 = setTimeout(() => setThinkingPhase(2), 4500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [isThinking]);
+
+  // 줄 단위 타이핑 애니메이션
   useEffect(() => {
     if (!isStreamingMsg || !fullText) {
-      setDisplayedLen(fullText.length);
+      setDisplayedLines(textLines.length);
       setAnimDone(true);
       return;
     }
     let cur = 0;
-    const total = fullText.length;
-    // adaptive chunk: 총 ~80 틱, 최소 1자, 최대 6자
-    const chunk = Math.min(6, Math.max(1, Math.ceil(total / 80)));
+    const total = textLines.length;
     animTimerRef.current = setInterval(() => {
-      cur = Math.min(cur + chunk, total);
-      setDisplayedLen(cur);
+      cur = Math.min(cur + 1, total); // 1줄씩
+      setDisplayedLines(cur);
       if (cur >= total) {
         setAnimDone(true);
         if (animTimerRef.current) clearInterval(animTimerRef.current);
       }
-    }, 18);
+    }, 90); // 90ms/줄 → 자연스러운 LLM 타이핑 속도
     return () => { if (animTimerRef.current) clearInterval(animTimerRef.current); };
   }, []); // 마운트 시 1회만
 
-  // ── 생각 중 버블 ──────────────────────────────────────────────────────
+  // ── 생각 중 버블 (단계별 상태 메시지) ──────────────────────────────────
   if (isThinking) {
+    const statusMsgs = getLoadingMessages(fullText);
     return (
       <div className="flex justify-start w-full">
-        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-3.5 inline-flex items-center gap-2">
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-3.5 inline-flex items-center gap-2.5">
           <div className="size-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
             <Activity className="size-3.5 text-white" />
           </div>
+          <span className="text-[12.5px] text-gray-500">{statusMsgs[thinkingPhase]}</span>
           <div className="flex gap-1">
             <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
             <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -902,8 +936,9 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
     );
   }
 
-  // ── 타이핑 애니메이션 진행 중 ─────────────────────────────────────────
+  // ── 타이핑 중: 줄 단위 ReactMarkdown (표 정상 렌더링) ────────────────────
   if (!animDone) {
+    const displayText = textLines.slice(0, displayedLines).join("\n");
     return (
       <div className="flex justify-start w-full">
         <div className="w-full space-y-3">
@@ -915,10 +950,24 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
                 </div>
                 <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
               </div>
-              <p className="text-[13.5px] text-gray-700 leading-[1.7] whitespace-pre-wrap">
-                {fullText.slice(0, displayedLen)}
+              <div className="text-[13.5px] text-gray-700 leading-[1.7]">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                  strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
+                  ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
+                  ol: (props: any) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{props.children}</ol>,
+                  li: (props: any) => (<li className="flex items-start gap-2"><span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" /><span>{props.children}</span></li>),
+                  p: (props: any) => <p className="mb-2 last:mb-0">{props.children}</p>,
+                  table: (props: any) => (<div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100"><table className="w-full text-[12px]">{props.children}</table></div>),
+                  thead: (props: any) => <thead className="bg-gray-50">{props.children}</thead>,
+                  th: (props: any) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{props.children}</th>,
+                  td: (props: any) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{props.children}</td>,
+                  h1: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                  h2: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                  h3: (props: any) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{props.children}</h4>,
+                  code: (props: any) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{props.children}</code>,
+                }}>{displayText}</ReactMarkdown>
                 <span className="inline-block w-0.5 h-[1em] bg-indigo-400 ml-0.5 animate-pulse align-text-bottom rounded-full" />
-              </p>
+              </div>
             </div>
           </div>
         </div>
