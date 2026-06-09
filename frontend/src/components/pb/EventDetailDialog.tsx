@@ -159,11 +159,13 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
 
                       {/* 인과관계 흐름도 */}
                       {causalFlow.length > 0 && (
-                        <div className="flex items-center justify-center gap-1.5 py-2">
+                        <div className="flex items-center gap-1.5 py-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                           {causalFlow.map((step, i) => (
-                            <span key={i} className="flex items-center gap-1.5">
-                              <span className="text-[12px] font-medium text-foreground bg-muted/80 px-2 py-1 rounded-lg">{step}</span>
-                              {i < causalFlow.length - 1 && <span className="text-muted-foreground text-[14px]">→</span>}
+                            <span key={i} className="flex items-center gap-1.5 shrink-0">
+                              <span className="flex items-center justify-center text-center text-[11.5px] font-semibold text-foreground bg-card border border-border/60 rounded-xl px-2.5 py-2 leading-tight min-w-[72px]">{step}</span>
+                              {i < causalFlow.length - 1 && (
+                                <span className="text-muted-foreground text-[13px] shrink-0">→</span>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -239,16 +241,24 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                     </p>
 
                     <div className="flex flex-wrap gap-2">
-                      {sectorKeys.map((s, i) => (
-                        <button key={s} onClick={() => setActiveSector(i)}
-                          className={`inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors whitespace-nowrap ${
-                            i === activeSector
-                              ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
-                              : "bg-card text-foreground/80 border-border/60"
-                          }`}>
-                          #{s}
-                        </button>
-                      ))}
+                      {sectorKeys.map((s, i) => {
+                        const isActive = i === activeSector;
+                        const sAssets = sectorGroups[s] ?? [];
+                        const positive = sAssets.filter((a) => a.impact_direction === "긍정").length >= sAssets.length / 2;
+                        return (
+                          <button key={s} onClick={() => setActiveSector(i)}
+                            className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors whitespace-nowrap ${
+                              isActive
+                                ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
+                                : "bg-card text-foreground/80 border-border/60"
+                            }`}>
+                            <span>{s}</span>
+                            <span className={`inline-flex items-center text-[11px] ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
+                              {positive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {currentAssets.length > 0 && (
@@ -267,8 +277,40 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                 {/* 간접 영향 금융상품 */}
                 {indirectAssets.length > 0 && (
                   <section className="space-y-3">
-                    <SectionTitle icon="🔗">함께 보면 좋은 금융상품</SectionTitle>
-                    <ul className="space-y-2">{indirectAssets.slice(0, 5).map(renderAsset)}</ul>
+                    <button
+                      onClick={() => setShowIndirect((v) => !v)}
+                      className="w-full flex items-center justify-between text-[12px] font-semibold text-muted-foreground tracking-wide"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span>🔗</span>
+                        <span>영향을 받을 수 있는 금융상품</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
+                              aria-label="설명"
+                            >
+                              <Info className="size-3.5" />
+                            </span>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            side="top"
+                            align="start"
+                            className="w-[240px] text-[12px] leading-relaxed"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            여러 자산에 투자되어 있어 기초자산을 통해 영향을 받을 수 있어요
+                          </PopoverContent>
+                        </Popover>
+                      </span>
+                      <ChevronDown className={`size-4 transition-transform ${showIndirect ? "rotate-180" : ""}`} />
+                    </button>
+                    {showIndirect && (
+                      <ul className="space-y-2">{indirectAssets.slice(0, 5).map(renderAsset)}</ul>
+                    )}
                   </section>
                 )}
 
@@ -288,6 +330,9 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
               <p className="text-center text-[13px] text-muted-foreground py-12">이벤트 정보를 불러올 수 없습니다.</p>
             )}
           </div>
+          {data && !loading && (
+            <AiChatCta onClick={() => { onOpenChange(false); navigate({ to: "/chat", search: {} }); }} />
+          )}
         </DrawerPrimitive.Content>
       </DrawerPortal>
     </Drawer>
