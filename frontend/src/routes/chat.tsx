@@ -34,6 +34,8 @@ import {
 
 type ChatSearch = { autoPromptType?: string };
 
+let _autoScrollEnabled = true;
+
 export const Route = createFileRoute("/chat")({
   validateSearch: (search: Record<string, unknown>): ChatSearch => ({
     autoPromptType: (search.autoPromptType as string) || undefined,
@@ -243,8 +245,10 @@ function ChatPage() {
       const nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 100);
       if (nearBottom) {
         autoScrollRef.current = true;
+        _autoScrollEnabled = true;
       } else if (window.scrollY < lastScrollY.current - 10) {
         autoScrollRef.current = false;
+        _autoScrollEnabled = false;
       }
       lastScrollY.current = window.scrollY;
     };
@@ -338,7 +342,7 @@ function ChatPage() {
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
     // 사용자 메시지 + thinking 버블 즉시 표시
-    autoScrollRef.current = true; // 새 질문 전송 시 자동 스크롤 복원
+    autoScrollRef.current = true; _autoScrollEnabled = true; // 새 질문 전송 시 자동 스크롤 복원
     setMessages(p => [...p, { role: "user", text }, { role: "bot", text: text, isThinking: true }]);
     setLoading(true);
     // history auto-saved by useEffect (multi-session)
@@ -411,7 +415,11 @@ function ChatPage() {
             const match = list.find(s => s.title === q);
             if (match) {
               window.__AIPB_SID = match.id;
-              setMessages(loadSessionMessages(match.id) as Msg[]);
+              setMessages(
+                (loadSessionMessages(match.id) as Msg[]).map((m: Msg) =>
+                  m.role === "bot" ? { ...m, isStreaming: false, isThinking: false } as Msg : m
+                )
+              );
             } else {
               sendQuestion(q);
             }
@@ -878,17 +886,24 @@ function CardTypeRenderer({ msg, onItemClick }: { msg: Msg & { role: "bot" }; on
 
 /* ===== Animation Helpers ===== */
 // 텍스트에서 GFM 표 블록 위치를 미리 계산
-function buildTableSegments(text: string): { start: number; end: number }[] {
+function buildAtomicBlocks(text: string): { start: number; end: number }[] {
   const segs: { start: number; end: number }[] = [];
   const lines = text.split("\n");
   let ci = 0, i = 0;
   while (i < lines.length) {
     if (lines[i].trimStart().startsWith("|")) {
+      // GFM 표 블록: 연속된 | 줄 전체
       const start = ci;
       while (i < lines.length && lines[i].trimStart().startsWith("|")) {
         ci += lines[i].length + 1;
         i++;
       }
+      segs.push({ start, end: ci });
+    } else if (/\{\{CHART:\d+\}\}/.test(lines[i])) {
+      // 차트 마커: 단일 줄 atomic block
+      const start = ci;
+      ci += lines[i].length + 1;
+      i++;
       segs.push({ start, end: ci });
     } else {
       ci += lines[i].length + 1;
@@ -976,7 +991,7 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
       setAnimDone(true);
       return;
     }
-    tableSegsRef.current = buildTableSegments(fullText);
+    tableSegsRef.current = buildAtomicBlocks(fullText);
     let cur = 0;
     const total = fullText.length;
     // adaptive chunk: 총 ~200 스텝, 최소 1자 (실제 LLM 타이핑 속도)
@@ -1005,9 +1020,12 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
     if (!isLast || animDone || !isStreamingMsg) return;
     const endEl = document.getElementById("aipb-chat-end");
     if (!endEl) return;
-    const nearBottom = (window.innerHeight + window.scrollY) >= (document.documentElement.scrollHeight - 120);
-    if (nearBottom) endEl.scrollIntoView({ behavior: "instant" });
+    if (_autoScrollEnabled) endEl.scrollIntoView({ behavior: "instant" });
   }, [displayedLen]);
+
+  // isHybrid / chartSections: 타이핑 중 차트 렌더링에도 필요하므로 상단에 선언
+  const isHybrid = !!(msg.text && msg.structured && !msg.structured.summary && msg.structured.sections?.length > 0);
+  const chartSections = isHybrid ? (msg.structured?.sections?.filter((s: any) => s.section_type === "chart_data") || []) : [];
 
   // ── 생각 중 버블 (단계별 상태 메시지) ──────────────────────────────────
   if (isThinking) {
@@ -1044,21 +1062,37 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
                 <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
               </div>
               <div className="text-[13.5px] text-gray-700 leading-[1.7]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                  strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
-                  ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
-                  ol: (props: any) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{props.children}</ol>,
-                  li: (props: any) => (<li className="flex items-start gap-2"><span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" /><span>{props.children}</span></li>),
-                  p: (props: any) => <p className="mb-2 last:mb-0">{props.children}</p>,
-                  table: (props: any) => (<div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100"><table className="w-full text-[12px]">{props.children}</table></div>),
-                  thead: (props: any) => <thead className="bg-gray-50">{props.children}</thead>,
-                  th: (props: any) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{props.children}</th>,
-                  td: (props: any) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{props.children}</td>,
-                  h1: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
-                  h2: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
-                  h3: (props: any) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{props.children}</h4>,
-                  code: (props: any) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{props.children}</code>,
-                }}>{displayText}</ReactMarkdown>
+                {displayText.split(/\{\{CHART:(\d+)\}\}/).map((seg: string, idx: number) => {
+                  if (idx % 2 === 1) {
+                    const cs = chartSections[parseInt(seg)];
+                    return cs ? (
+                      <div key={idx} className="my-3 rounded-xl border border-gray-100 bg-gray-50/50 p-3 w-full min-h-[120px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[13px]">{cs.icon}</span>
+                          <span className="text-[11px] font-bold text-gray-600">{cs.title}</span>
+                        </div>
+                        <SectionChart content={cs.content} />
+                      </div>
+                    ) : null;
+                  }
+                  return seg ? (
+                    <ReactMarkdown key={idx} remarkPlugins={[remarkGfm]} components={{
+                      strong: (props: any) => <strong className="font-bold text-gray-900">{props.children}</strong>,
+                      ul: (props: any) => <ul className="mt-2 space-y-1.5 list-none pl-0">{props.children}</ul>,
+                      ol: (props: any) => <ol className="mt-2 space-y-1.5 list-decimal pl-4">{props.children}</ol>,
+                      li: (props: any) => (<li className="flex items-start gap-2"><span className="size-1.5 rounded-full mt-[7px] shrink-0 bg-indigo-400" /><span>{props.children}</span></li>),
+                      p: (props: any) => <p className="mb-2 last:mb-0">{props.children}</p>,
+                      table: (props: any) => (<div className="overflow-x-auto mt-2 mb-2 rounded-lg border border-gray-100"><table className="w-full text-[12px]">{props.children}</table></div>),
+                      thead: (props: any) => <thead className="bg-gray-50">{props.children}</thead>,
+                      th: (props: any) => <th className="px-2 py-1.5 text-left font-semibold text-gray-700 border-b border-gray-100">{props.children}</th>,
+                      td: (props: any) => <td className="px-2 py-1.5 text-gray-600 border-b border-gray-50">{props.children}</td>,
+                      h1: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                      h2: (props: any) => <h3 className="text-[14px] font-bold text-gray-900 mt-3 mb-1">{props.children}</h3>,
+                      h3: (props: any) => <h4 className="text-[13.5px] font-bold text-gray-800 mt-2 mb-1">{props.children}</h4>,
+                      code: (props: any) => <code className="text-[12px] bg-gray-100 px-1 py-0.5 rounded">{props.children}</code>,
+                    }}>{seg}</ReactMarkdown>
+                  ) : null;
+                })}
                 <span className="inline-block w-0.5 h-[1em] bg-indigo-400 ml-0.5 animate-pulse align-text-bottom rounded-full" />
               </div>
             </div>
@@ -1069,9 +1103,6 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
   }
 
   // ── 이하 기존 로직 (애니메이션 완료 후) ──────────────────────────────
-
-  // 하이브리드 모드: answer(마크다운) + structured(차트만) 동시 표시
-  const isHybrid = msg.text && msg.structured && !msg.structured.summary && msg.structured.sections?.length > 0;
 
   // card_type 분기: 요약/상세 카드 렌더링
   const cardRenderer = (msg as any).card_type ? (
@@ -1090,7 +1121,6 @@ function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & 
   }
 
   // 인라인 차트: {{CHART:N}} 마커를 감지해서 텍스트+차트 번갈아 렌더링
-  const chartSections = isHybrid ? msg.structured?.sections?.filter((s: any) => s.section_type === "chart_data") || [] : [];
   const hasInlineCharts = msg.text?.includes("{{CHART:");
 
   const charts = msg.tableData ? buildCharts(msg.tableData) : [];
