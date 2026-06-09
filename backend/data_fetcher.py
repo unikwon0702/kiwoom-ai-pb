@@ -382,15 +382,25 @@ def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
         return {"title": news_title, "why_notable": [], "sector_impacts": [], "hashtags": [], "related_assets": []}
 
     # 제목 매칭: enriched_headline 또는 event_title
+    # 1순위: exact match (사용자가 카드에서 클릭한 enriched_headline과 정확히 일치)
     q_lower = news_title.lower()
     target = next(
         (n for n in news if q_lower and (
-            q_lower in (n.get("enriched_headline") or "").lower() or
-            q_lower in (n.get("event_title") or "").lower() or
-            (n.get("enriched_headline") or "").lower() in q_lower
+            (n.get("enriched_headline") or "").lower() == q_lower or
+            (n.get("event_title") or "").lower() == q_lower
         )),
-        news[0] if news else {}
+        None
     )
+    # 2순위: 부분 문자열 매칭 (exact 실패 시)
+    if not target:
+        target = next(
+            (n for n in news if q_lower and (
+                q_lower in (n.get("enriched_headline") or "").lower() or
+                q_lower in (n.get("event_title") or "").lower() or
+                (n.get("enriched_headline") or "").lower() in q_lower
+            )),
+            news[0] if news else {}
+        )
 
     title = target.get("enriched_headline") or target.get("event_title", news_title)
 

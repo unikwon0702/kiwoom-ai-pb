@@ -1107,6 +1107,7 @@ def chat_v2(req: ChatRequest):
             card_type = "news_signal_summary"
             card_data = build_news_signal_summary(data, _q)
         elif intent == "news_signal_detail":
+            data["news_feed"] = _get_cached_signals(6)  # 홈 화면·요약 카드와 동일 TTL 캐시 사용
             card_type = "news_signal_detail"
             card_data = build_news_signal_detail(data, _q)
 
