@@ -56,7 +56,7 @@ type StructuredResponse = {
 };
 type Msg =
   | { role: "user"; text: string }
-  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse; card_type?: string; card_data?: any; disclaimer?: string };
+  | { role: "bot"; text: string; description?: string; sql?: string | null; tableData?: TableData | null; isAnnouncement?: boolean; followUps?: string[]; structured?: StructuredResponse; card_type?: string; card_data?: any; disclaimer?: string; isThinking?: boolean; isStreaming?: boolean };
 
 /* ===== Constants ===== */
 // const HISTORY_KEY = "aipb_chat_questions"; // replaced by chatSession
@@ -307,7 +307,7 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined, disclaimer: data.disclaimer || undefined }]);
+      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined, disclaimer: data.disclaimer || undefined, isStreaming: true }]);
     } catch (e: any) {
       setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
@@ -315,7 +315,8 @@ function ChatPage() {
 
   const sendQuestion = async (text: string) => {
     if (!customer?.id) { setMessages(p => [...p, { role: "bot", text: "고객을 먼저 선택해주세요." }]); return; }
-    setMessages(p => [...p, { role: "user", text }]);
+    // 사용자 메시지 + thinking 버블 즉시 표시
+    setMessages(p => [...p, { role: "user", text }, { role: "bot", text: "", isThinking: true }]);
     setLoading(true);
     // history auto-saved by useEffect (multi-session)
     try {
@@ -353,9 +354,10 @@ function ChatPage() {
         else if (td.data_array && td.schema) tableData = { columns: td.schema.map((c: any) => c.name || c), rows: td.data_array };
       }
       const followUps: string[] = (data.suggested_questions?.slice(0, 3) || []).map((q: string) => cleanFollowUp(q, customer.name));
-      setMessages(p => [...p, { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined, disclaimer: data.disclaimer || undefined }]);
+      // thinking 버블을 실제 응답으로 교체 + isStreaming:true 로 타이핑 애니메이션 트리거
+      setMessages(p => [...p.slice(0, -1), { role: "bot", text: stripFollowUpText(data.answer || "분석 완료"), description: data.description || "", sql: data.sql, tableData, followUps, structured: data.structured || undefined, card_type: data.card_type || undefined, card_data: data.card_data || undefined, disclaimer: data.disclaimer || undefined, isStreaming: true }]);
     } catch (e: any) {
-      setMessages(p => [...p, { role: "bot", text: `오류: ${e.message}` }]);
+      setMessages(p => [...p.slice(0, -1), { role: "bot", text: `오류: ${e.message}` }]);
     } finally { setLoading(false); }
   };
 
@@ -402,14 +404,7 @@ function ChatPage() {
                 </div>
               ) : m.role === "bot" && m.isAnnouncement ? (
                 <AnnouncementMessage key={i} text={m.text} />
-              ) : <BotMessage key={i} msg={m} customerName={customer.name} onSend={sendQuestion} />)}
-              {loading && <LoadingPulse name={customer.name} />}
-              {!loading && messages.length > 0 && messages[messages.length - 1].role === "bot" && !(messages[messages.length - 1] as any).isAnnouncement && ((messages[messages.length - 1] as any).followUps?.length > 0) && (
-                <FollowUpQuestions
-                  questions={(messages[messages.length - 1] as any).followUps}
-                  onSelect={sendQuestion}
-                />
-              )}
+              ) : <BotMessage key={i} msg={m} customerName={customer.name} onSend={sendQuestion} isLast={i === messages.length - 1} />)}
               <div ref={endRef} />
             </div>
           )}
@@ -859,7 +854,80 @@ function CardTypeRenderer({ msg, onItemClick }: { msg: Msg & { role: "bot" }; on
 }
 
 /* ===== Bot Message ===== */
-function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" }; customerName: string; onSend: (q: string) => void }) {
+function BotMessage({ msg, customerName, onSend, isLast = false }: { msg: Msg & { role: "bot" }; customerName: string; onSend: (q: string) => void; isLast?: boolean }) {
+  const isThinking = !!(msg as any).isThinking;
+  const isStreamingMsg = !!(msg as any).isStreaming;
+  const fullText = msg.text || "";
+
+  const [displayedLen, setDisplayedLen] = useState(isStreamingMsg ? 0 : fullText.length);
+  const [animDone, setAnimDone] = useState(!isStreamingMsg);
+  const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!isStreamingMsg || !fullText) {
+      setDisplayedLen(fullText.length);
+      setAnimDone(true);
+      return;
+    }
+    let cur = 0;
+    const total = fullText.length;
+    // adaptive chunk: 총 ~80 틱, 최소 1자, 최대 6자
+    const chunk = Math.min(6, Math.max(1, Math.ceil(total / 80)));
+    animTimerRef.current = setInterval(() => {
+      cur = Math.min(cur + chunk, total);
+      setDisplayedLen(cur);
+      if (cur >= total) {
+        setAnimDone(true);
+        if (animTimerRef.current) clearInterval(animTimerRef.current);
+      }
+    }, 18);
+    return () => { if (animTimerRef.current) clearInterval(animTimerRef.current); };
+  }, []); // 마운트 시 1회만
+
+  // ── 생각 중 버블 ──────────────────────────────────────────────────────
+  if (isThinking) {
+    return (
+      <div className="flex justify-start w-full">
+        <div className="rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-3.5 inline-flex items-center gap-2">
+          <div className="size-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
+            <Activity className="size-3.5 text-white" />
+          </div>
+          <div className="flex gap-1">
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 타이핑 애니메이션 진행 중 ─────────────────────────────────────────
+  if (!animDone) {
+    return (
+      <div className="flex justify-start w-full">
+        <div className="w-full space-y-3">
+          <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-4 pt-4 pb-3">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="size-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "linear-gradient(135deg, #4F46E5, #7C3AED)" }}>
+                  <Activity className="size-3.5 text-white" />
+                </div>
+                <span className="text-[13px] font-bold text-gray-800">{customerName}님 분석 결과</span>
+              </div>
+              <p className="text-[13.5px] text-gray-700 leading-[1.7] whitespace-pre-wrap">
+                {fullText.slice(0, displayedLen)}
+                <span className="inline-block w-0.5 h-[1em] bg-indigo-400 ml-0.5 animate-pulse align-text-bottom rounded-full" />
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 이하 기존 로직 (애니메이션 완료 후) ──────────────────────────────
+
   // 하이브리드 모드: answer(마크다운) + structured(차트만) 동시 표시
   const isHybrid = msg.text && msg.structured && !msg.structured.summary && msg.structured.sections?.length > 0;
 
@@ -874,6 +942,7 @@ function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" };
       <div className="space-y-3">
         <StructuredCard data={msg.structured} customerName={customerName} />
         {cardRenderer}
+        {isLast && (msg.followUps?.length ?? 0) > 0 && <FollowUpQuestions questions={msg.followUps!} onSelect={onSend} />}
       </div>
     );
   }
@@ -1061,6 +1130,8 @@ function BotMessage({ msg, customerName, onSend }: { msg: Msg & { role: "bot" };
           </p>
         )}
       </div>
+      {/* 후속 질문 — 마지막 메시지, 애니메이션 완료 후 */}
+      {isLast && (msg.followUps?.length ?? 0) > 0 && <FollowUpQuestions questions={msg.followUps!} onSelect={onSend} />}
     </div>
   );
 }
