@@ -7,6 +7,7 @@ import { tagClassName } from "@/components/pb/tag-style";
 import { api } from "@/lib/api";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AiChatCta } from "./AiChatCta";
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; eventId: string | null };
 
@@ -56,6 +57,7 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
 
   const tags: string[] = data?.tags_json ? JSON.parse(data.tags_json) : [];
   const allAssets: ImpactedAsset[] = data?.impacted_assets_json ? JSON.parse(data.impacted_assets_json) : [];
+  const chartData: { label: string; value: number; count: number }[] = data?.chart_data ?? [];
 
   // Enriched content 파싱
   let enriched: any = {};
@@ -65,6 +67,18 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
     } catch {}
   }
   const causalFlow: string[] = enriched.causal_flow ?? [];
+  const causalFlowEmojis = causalFlow.map((step, idx) => {
+    if (/AI|인공지능|LLM/i.test(step)) return "🤖";
+    if (/반도체|메모리|DRAM|NAND|HBM|칩/i.test(step)) return "🧠";
+    if (/장비|소재|공장|생산|제조/i.test(step)) return "🏭";
+    if (/금리|달러|원화|환율/i.test(step)) return "💵";
+    if (/수출|무역|관세/i.test(step)) return "🌐";
+    if (/배터리|전기차|EV|이차전지/i.test(step)) return "🔋";
+    if (/바이오|제약|신약/i.test(step)) return "💊";
+    if (/에너지|유가|석유/i.test(step)) return "⛽";
+    if (/금융|은행|보험/i.test(step)) return "🏦";
+    return ["🔍", "⚡", "💰", "📊", "🎯"][idx % 5];
+  });
   const enrichedInsights: {tag: string; body: string}[] = enriched.insights ?? [];
   const enrichedRisks: string[] = enriched.risks ?? [];
   const shortReasonsMap: Record<string, string> = enriched.short_reasons ?? {};
@@ -159,49 +173,98 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
 
                       {/* 인과관계 흐름도 */}
                       {causalFlow.length > 0 && (
-                        <div className="flex items-center gap-1.5 py-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                        <div className="flex items-center justify-between gap-1.5 pt-2">
                           {causalFlow.map((step, i) => (
-                            <span key={i} className="flex items-center gap-1.5 shrink-0">
-                              <span className="flex items-center justify-center text-center text-[11.5px] font-semibold text-foreground bg-card border border-border/60 rounded-xl px-2.5 py-2 leading-tight min-w-[72px]">{step}</span>
+                            <div key={i} className="flex items-center gap-1.5 flex-1">
+                              <div className="flex-1 flex flex-col items-center gap-1 rounded-xl bg-card border border-border/60 py-2.5 px-1">
+                                <span className="text-[18px]">{causalFlowEmojis[i]}</span>
+                                <span className="text-[11px] font-semibold text-foreground text-center leading-tight">{step}</span>
+                              </div>
                               {i < causalFlow.length - 1 && (
-                                <span className="text-muted-foreground text-[13px] shrink-0">→</span>
+                                <span className="text-muted-foreground text-[14px]">→</span>
                               )}
-                            </span>
+                            </div>
                           ))}
                         </div>
                       )}
 
-                      {/* 섹터별 영향도 */}
-                      <div className="rounded-xl bg-card border border-border/60 p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[12.5px] font-semibold text-foreground">섹터별 영향도</span>
-                          <span className="text-[11px] text-muted-foreground">{allAssets.length}개 종목 분석</span>
+                      {/* 신호 강도 추이 / 섹터별 영향도 */}
+                      {chartData.length > 0 ? (
+                        <div className="rounded-xl bg-card border border-border/60 p-4">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[12.5px] font-semibold text-foreground">신호 강도 추이</span>
+                            <span className="text-[11px] text-muted-foreground">{data.related_sector} · 최근 8주</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mb-2">주별 뉴스 중요도 평균 (높을수록 주목도 상승)</p>
+                          <ResponsiveContainer width="100%" height={80}>
+                            <AreaChart data={chartData} margin={{ top: 4, right: 2, left: -28, bottom: 0 }}>
+                              <defs>
+                                <linearGradient id={`grad-${data.event_id}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.35} />
+                                  <stop offset="95%" stopColor="var(--pos)" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <XAxis
+                                dataKey="label"
+                                tick={{ fontSize: 9, fill: "var(--muted-foreground)" }}
+                                axisLine={false}
+                                tickLine={false}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="value"
+                                stroke="var(--pos)"
+                                strokeWidth={2}
+                                fill={`url(#grad-${data.event_id})`}
+                                dot={false}
+                                activeDot={{ r: 3, fill: "var(--pos)", strokeWidth: 0 }}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  background: "var(--background)",
+                                  border: "1px solid var(--border)",
+                                  borderRadius: "8px",
+                                  fontSize: "11px",
+                                  padding: "4px 8px",
+                                }}
+                                formatter={(v: any) => [`${v}`, "신호강도"]}
+                                labelFormatter={(l) => `${l}주`}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
                         </div>
-                        <div className="space-y-2">
-                          {sectorKeys.slice(0, 4).map((sector) => {
-                            const assets = sectorGroups[sector] ?? [];
-                            const avgScore = assets.reduce((sum, a) => sum + (a.impact_score || 0), 0) / assets.length;
-                            const pct = Math.min(Math.round(avgScore * 100), 100);
-                            const isPositive = assets.filter(a => a.impact_direction === "긍정").length >= assets.length / 2;
-                            return (
-                              <div key={sector}>
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <span className="text-[11.5px] font-medium text-foreground">{sector}</span>
-                                  <span className={`text-[11px] font-bold ${isPositive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
-                                    {isPositive ? "+" : "-"}{pct}%
-                                  </span>
+                      ) : (
+                        <div className="rounded-xl bg-card border border-border/60 p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[12.5px] font-semibold text-foreground">섹터별 영향도</span>
+                            <span className="text-[11px] text-muted-foreground">{allAssets.length}개 종목 분석</span>
+                          </div>
+                          <div className="space-y-2">
+                            {sectorKeys.slice(0, 4).map((sector) => {
+                              const assets = sectorGroups[sector] ?? [];
+                              const avgScore = assets.reduce((sum, a) => sum + (a.impact_score || 0), 0) / assets.length;
+                              const pct = Math.min(Math.round(avgScore * 100), 100);
+                              const isPositive = assets.filter(a => a.impact_direction === "긍정").length >= assets.length / 2;
+                              return (
+                                <div key={sector}>
+                                  <div className="flex items-center justify-between mb-0.5">
+                                    <span className="text-[11.5px] font-medium text-foreground">{sector}</span>
+                                    <span className={`text-[11px] font-bold ${isPositive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
+                                      {isPositive ? "+" : "-"}{pct}%
+                                    </span>
+                                  </div>
+                                  <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all ${isPositive ? "bg-[color:var(--pos)]" : "bg-[color:var(--neg)]"}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
                                 </div>
-                                <div className="h-2 rounded-full bg-muted/60 overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all ${isPositive ? "bg-[color:var(--pos)]" : "bg-[color:var(--neg)]"}`}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </section>
@@ -240,35 +303,28 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                       이 이벤트와 직접적으로 연결된 섹터의 대표 자산을 모았어요.
                     </p>
 
-                    <div className="flex flex-wrap gap-2">
-                      {sectorKeys.map((s, i) => {
-                        const isActive = i === activeSector;
-                        const sAssets = sectorGroups[s] ?? [];
-                        const positive = sAssets.filter((a) => a.impact_direction === "긍정").length >= sAssets.length / 2;
-                        return (
-                          <button key={s} onClick={() => setActiveSector(i)}
-                            className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors whitespace-nowrap ${
-                              isActive
-                                ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
-                                : "bg-card text-foreground/80 border-border/60"
-                            }`}>
-                            <span>{s}</span>
-                            <span className={`inline-flex items-center text-[11px] ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
-                              {positive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="flex gap-2">
+                      {sectorKeys.map((s, i) => (
+                        <button
+                          key={s}
+                          onClick={() => setActiveSector(i)}
+                          className={`flex-1 inline-flex items-center justify-center text-[12px] font-semibold px-2 py-2 rounded-full border transition-colors min-w-0 ${
+                            i === activeSector
+                              ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
+                              : "bg-card text-foreground/80 border-border/60"
+                          }`}
+                        >
+                          #{s}
+                        </button>
+                      ))}
                     </div>
 
-                    {currentAssets.length > 0 && (
-                      <div className="space-y-1.5 px-1">
-                        <p className="text-[13px] font-semibold text-foreground">왜 연관 있나요?</p>
-                        <p className="text-[12.5px] text-muted-foreground leading-relaxed">
-                          {currentAssets[0]?.reason}
-                        </p>
-                      </div>
-                    )}
+                    <div className="space-y-1.5 px-1">
+                      <p className="text-[13px] font-semibold text-foreground">왜 연관 있나요?</p>
+                      <p className="text-[12.5px] text-muted-foreground leading-relaxed">
+                        {currentAssets[0]?.reason}
+                      </p>
+                    </div>
 
                     <ul className="space-y-2">{currentAssets.map(renderAsset)}</ul>
                   </section>

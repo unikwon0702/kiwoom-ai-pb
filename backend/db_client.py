@@ -464,7 +464,37 @@ class DBClient:
             WHERE n.event_id = '{event_id}'
             LIMIT 1
         """)
-        return rows[0] if rows else {}
+        if not rows:
+            return {}
+        event = rows[0]
+
+        # 섹터 신호 강도 추이 (최근 8주 주별)
+        sector = event.get('related_sector', '')
+        chart_data = []
+        if sector:
+            try:
+                chart_rows = self._execute(f"""
+                    SELECT
+                        DATE_FORMAT(DATE_TRUNC('week', published_at), 'M/d') AS label,
+                        CAST(ROUND(AVG(CAST(importance_score AS DOUBLE)) * 100) AS INT) AS value,
+                        COUNT(*) AS cnt
+                    FROM {self._t('app_cache_news_feed')}
+                    WHERE related_sector = '{sector}'
+                      AND published_at >= CURRENT_DATE() - 56
+                      AND importance_score IS NOT NULL
+                    GROUP BY DATE_TRUNC('week', published_at)
+                    ORDER BY DATE_TRUNC('week', published_at)
+                    LIMIT 8
+                """)
+                chart_data = [
+                    {"label": r["label"], "value": int(r["value"] or 0), "count": int(r["cnt"] or 0)}
+                    for r in chart_rows
+                ]
+            except Exception:
+                chart_data = []
+
+        event['chart_data'] = chart_data
+        return event
 
     # ============================================================
     # Holding Detail (종목 상세 팝업)
