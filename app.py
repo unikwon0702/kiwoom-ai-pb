@@ -636,6 +636,21 @@ def chat_v2(req: ChatRequest):
         data = data_future.result()
 
     intent = route_result["intent"]
+    # Post-routing 안전망: schedule 카테고리 키워드 → upcoming_schedule_detail 강제
+    # 특정 이름이 아닌 카테고리 기반 → 어떤 일정이 추가되어도 자동 대응
+    _SCHED_KW_POST = [
+        'fomc','금리결정','연준','기준금리','cpi','ppi','gdp',
+        '소비자물가','생산자물가','소비자심리','미시간대','실업률',
+        '주주총회','주총','소집공고','임시주총','정기주총',
+        '실적발표','증권발행실적','사업보고서','분기보고서','정기공시',
+        'els','배당기준일','배당락',
+    ]
+    _DETAIL_KW_POST = ['알려줘','상세','보여줘','설명','에 대해','대해','뭐야','알려','어때','궁금','자세히']
+    if (intent not in ('upcoming_schedule_detail','upcoming_schedule_summary')
+            and any(k in req.question.lower() for k in _SCHED_KW_POST)
+            and any(t in req.question for t in _DETAIL_KW_POST)):
+        intent = "upcoming_schedule_detail"
+
     confidence = route_result["confidence"]
 
     logger.info(f"[V2] Intent: {intent} (conf={confidence:.2f})")
@@ -1025,7 +1040,45 @@ def chat_v2(req: ChatRequest):
             card_data = build_upcoming_schedule_summary(data, _q)
         elif intent == "upcoming_schedule_detail":
             card_type = "upcoming_schedule_detail"
-            card_data = build_upcoming_schedule_detail(data, _q)
+            # schedule_events에서 매칭된 이벤트 찾기
+            _schedules = data.get("schedule_events", [])
+            _q_lower = _q.lower()
+            _matched = next(
+                (s for s in _schedules if s.get("event_title", "").lower() and s.get("event_title", "").lower() in _q_lower),
+                None
+            )
+            if not _matched:
+                _q_words = [w for w in _q_lower.split() if len(w) >= 2]
+                _best, _best_score = None, 0
+                for _s in _schedules:
+                    _score = sum(1 for w in _q_words if w in _s.get("event_title", "").lower())
+                    if _score > _best_score:
+                        _best, _best_score = _s, _score
+                _matched = _best if _best and _best_score > 0 else (_schedules[0] if _schedules else {})
+            # event_id로 enriched 데이터 조회
+            _event_id = (_matched or {}).get("event_id")
+            if _event_id:
+                try:
+                    _enriched = db.get_schedule_detail(_event_id)
+                    _event_date = (_matched or {}).get("event_date")
+                    _date_str = str(_event_date)[:10] if _event_date else ""
+                    card_data = {
+                        "d_tag": _enriched.get("tag") or (_matched or {}).get("d_tag", ""),
+                        "date": _date_str,
+                        "title": _enriched.get("title") or (_matched or {}).get("event_title", ""),
+                        "summary": _enriched.get("summarySub", ""),
+                        "ai_summary": _enriched.get("summary", ""),
+                        "summary_icon": _enriched.get("summaryIcon", "🤖"),
+                        "summary_label": _enriched.get("summaryLabel", "AI 이벤트 요약"),
+                        "key_points": _enriched.get("reasons") or [],
+                        "reasons_icon": _enriched.get("reasonsIcon", "🔥"),
+                        "reasons_label": _enriched.get("reasonsLabel", "무슨 일이 일어날까?"),
+                    }
+                except Exception as _se:
+                    logger.warning(f"[CHAT_V2] get_schedule_detail failed: {_se}")
+                    card_data = build_upcoming_schedule_detail(data, _q)
+            else:
+                card_data = build_upcoming_schedule_detail(data, _q)
         elif intent in ("expert_movement_detail", "expert_type_detail"):
             card_type = intent
             # 유형 추출: "공격형", "장기형", "금상"

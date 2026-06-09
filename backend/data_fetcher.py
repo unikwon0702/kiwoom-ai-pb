@@ -113,7 +113,7 @@ ALL_SOURCES = [
     {"key": "holdings", "sql": f"SELECT * FROM {SCHEMA}.app_cache_holding_signals WHERE customer_id = '{{cid}}' ORDER BY date DESC, rn ASC LIMIT 10"},
     # Phase 2: 신규 카드 테이블 (실제 존재하는 테이블/컬럼으로 수정)
     {"key": "market_events", "sql": f"SELECT event_id, event_title, event_type, event_subtype, related_sector, related_theme, ai_investment_view, sentiment_score, importance_score, published_at, event_summary, impacted_assets AS impacted_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '뉴스' ORDER BY published_at DESC LIMIT 8"},
-    {"key": "schedule_events", "sql": f"SELECT event_id, event_title, event_type AS d_tag, published_at AS event_date, event_summary AS description, CAST(NULL AS STRING) AS key_points_json, CAST(NULL AS STRING) AS past_cases_json, CAST(NULL AS STRING) AS related_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type IN ('실적발표', '주총', '정기공시', 'ELS평가일', '매크로지표', '배당', '외교이벤트') ORDER BY published_at DESC LIMIT 8"},
+        {"key": "schedule_events", "sql": f"SELECT event_id, event_title, event_type AS d_tag, scheduled_date AS event_date, event_summary AS description, CAST(NULL AS STRING) AS key_points_json, CAST(NULL AS STRING) AS past_cases_json, CAST(NULL AS STRING) AS related_assets_json FROM {SCHEMA}.app_cache_news_feed WHERE event_type IN ('주총', '배당', 'ELS상환', '매크로지표') AND scheduled_date IS NOT NULL AND scheduled_date >= CURRENT_DATE() ORDER BY scheduled_date ASC LIMIT 15"},
     {"key": "top_investors", "sql": f"SELECT customer_id AS investor_id, investor_type, latest_trade_date AS signal_date, daily_buys_json AS daily_buy_tickers, daily_sells_json AS daily_sell_tickers, sector_allocation_json, domestic_top_json, overseas_top_json, total_asset_krw, holding_count AS avg_holdings, investor_emoji, short_status, tags_json, total_return_pct FROM {SCHEMA}.app_top_investor_cache ORDER BY rank ASC LIMIT 3"},
     {"key": "news_feed", "sql": f"SELECT news_id, event_id, news_title AS title, event_title, event_subtype AS badge, ai_investment_view AS description, news_summary, event_summary, TO_JSON(tags) AS hashtags_json, related_sector, related_theme, sentiment_score, importance_score, published_at, impacted_assets AS related_assets_json FROM {SCHEMA}.gd_llm_event_context WHERE event_type = '\ub274\uc2a4' ORDER BY published_at DESC LIMIT 8"},
 ]
@@ -250,7 +250,22 @@ def build_upcoming_schedule_detail(data: dict, event_title: str = "") -> dict:
     """app_cache_schedule_events → UpcomingScheduleDetailContentProps"""
     import json
     schedules = data.get("schedule_events", [])
-    target = next((s for s in schedules if event_title and event_title in s.get("event_title", "")), schedules[0] if schedules else {})
+    # DB 이벤트명이 사용자 질문에 포함되는지 체크 (어떤 일정이든 자동 매칭)
+    q_lower = event_title.lower()
+    target = next(
+        (s for s in schedules if s.get("event_title", "").lower() and s.get("event_title", "").lower() in q_lower),
+        None
+    )
+    if not target:
+        # 단어 레벨 부분 매칭 (공백 구분 키워드 중 2글자 이상)
+        q_words = [w for w in q_lower.split() if len(w) >= 2]
+        best, best_score = None, 0
+        for s in schedules:
+            title_lower = s.get("event_title", "").lower()
+            score = sum(1 for w in q_words if w in title_lower)
+            if score > best_score:
+                best, best_score = s, score
+        target = best if best and best_score > 0 else (schedules[0] if schedules else {})
     key_points = target.get("key_points_json")
     past_cases = target.get("past_cases_json")
     related_assets = target.get("related_assets_json")

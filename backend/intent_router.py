@@ -156,6 +156,41 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 # Router Function
 # ============================================================
 
+# ============================================================
+# Pre-Routing: LLM 호출 전 카테고리 기반 즉시 분류
+# 특정 이름이 아닌 '이벤트 타입 카테고리' 기반 → 신규 이벤트 추가시 자동 대응
+# ============================================================
+_SCHEDULE_CATEGORY_KW = [
+    # 매크로지표 (FOMC, CPI, GDP 등)
+    'fomc', '금리결정', '연준', '기준금리', 'cpi', 'ppi', 'gdp',
+    '소비자물가', '생산자물가', '소비자심리', '미시간대', '실업률', '비농업',
+    # 주총/공시
+    '주주총회', '주총', '소집공고', '임시주총', '정기주총',
+    # 실적/공시
+    '실적발표', '증권발행실적', '사업보고서', '분기보고서', '정기공시',
+    # ELS/배당
+    'els', '배당기준일', '배당락',
+    # 외교/일정 이벤트
+    '관세협상', 'g7', 'g20', '정상회담',
+]
+_DETAIL_TRIGGERS = [
+    '알려줘', '상세', '보여줘', '설명', '에 대해', '대해', '뭐야',
+    '알려', '어때', '궁금', '자세히', '알고싶어', '분석',
+]
+
+def _pre_route_schedule(question: str) -> str | None:
+    """
+    LLM 호출 전 일정/이벤트 카테고리 키워드 기반 즉시 라우팅.
+    특정 이벤트명이 아닌 카테고리 단위 → 어떤 일정이 추가되어도 자동 대응.
+    """
+    q_lower = question.lower()
+    has_schedule_kw = any(kw in q_lower for kw in _SCHEDULE_CATEGORY_KW)
+    has_detail_trigger = any(t in question for t in _DETAIL_TRIGGERS)
+    if has_schedule_kw and has_detail_trigger:
+        return "upcoming_schedule_detail"
+    return None
+
+
 def route(question: str, llm: LLMClient) -> dict:
     """
     LLM 기반 intent 분류.
@@ -168,6 +203,12 @@ def route(question: str, llm: LLMClient) -> dict:
             "is_lookup": bool,
         }
     """
+    # 1차: 카테고리 키워드 기반 즉시 분류 (LLM 오분류 방지)
+    pre = _pre_route_schedule(question)
+    if pre:
+        return {"intent": pre, "confidence": 0.95, "required_tables": INTENT_TABLE_MAP.get(pre, []), "is_lookup": True}
+
+    # 2차: LLM 기반 분류
     result = llm.route_intent(
         question=f"사용자 질문: \"{question}\"",
         system_prompt=ROUTER_SYSTEM_PROMPT,

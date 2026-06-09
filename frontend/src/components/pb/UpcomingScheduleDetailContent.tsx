@@ -38,11 +38,26 @@ export function UpcomingScheduleDetailContent({ data, inChat = false, onClose }:
         )}
       </div>
 
-      {/* 핵심 포인트 */}
+      {/* AI 이벤트 요약 섹션 (enriched 데이터) */}
+      {data.ai_summary && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+            <span>{data.summary_icon ?? "🤖"}</span>
+            <span>{data.summary_label ?? "AI 이벤트 요약"}</span>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-muted/30 px-3.5 py-3">
+            <p className="text-[14px] font-semibold text-foreground leading-snug">{data.ai_summary}</p>
+            {data.summary_sub && <p className="mt-1 text-[12px] text-muted-foreground">{data.summary_sub}</p>}
+          </div>
+        </section>
+      )}
+
+      {/* 핵심 포인트 / 무슨 일이 일어날까? */}
       {keyPoints.length > 0 && (
         <section className="space-y-2.5">
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-            <span>💡</span><span>이 일정에서 주목할 점</span>
+            <span>{data.reasons_icon ?? "💡"}</span>
+            <span>{data.reasons_label ?? "이 일정에서 주목할 점"}</span>
           </div>
           <ul className="space-y-2">
             {keyPoints.map((pt, i) => (
