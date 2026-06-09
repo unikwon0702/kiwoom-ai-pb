@@ -233,10 +233,10 @@ export function EventDetailDialog({ open, onOpenChange, eventId }: Props) {
                       이 이벤트와 직접적으로 연결된 섹터의 대표 자산을 모았어요.
                     </p>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {sectorKeys.map((s, i) => (
                         <button key={s} onClick={() => setActiveSector(i)}
-                          className={`flex-1 inline-flex items-center justify-center gap-1.5 text-[12.5px] font-semibold px-2 py-2 rounded-full border transition-colors ${
+                          className={`inline-flex items-center justify-center gap-1.5 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors whitespace-nowrap ${
                             i === activeSector
                               ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
                               : "bg-card text-foreground/80 border-border/60"
