@@ -136,7 +136,10 @@ class DBClient:
             LEFT JOIN {self._t('app_cache_enriched_content')} e
               ON d.event_id = e.source_id AND e.content_type = 'unexpected_enrichment'
             WHERE d.rn = 1
-            ORDER BY d.importance_score DESC, d.sort_timestamp DESC
+            ORDER BY
+                d.importance_score DESC,
+                d.sort_timestamp DESC NULLS LAST,
+                d.event_id DESC  -- 동일 score/timestamp 시 최신 이벤트 우선 (결정론적)
             LIMIT {limit}
         """)
 

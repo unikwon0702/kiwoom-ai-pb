@@ -178,6 +178,34 @@ _DETAIL_TRIGGERS = [
     '알려', '어때', '궁금', '자세히', '알고싶어', '분석',
 ]
 
+# ============================================================
+# 의외의 신호 뉴스 키워드 기반 즉시 라우팅
+# ============================================================
+_NEWS_SIGNAL_SUMMARY_KW = [
+    '의외의 신호', '주목할만한 신호', '주목할 신호', '의외의신호',
+    '주목할 뉴스', '주목할만한 뉴스', '뉴스 알려줘', '뉴스 보여줘',
+    '시장 뉴스', '투자 뉴스', '의외의 기회', '숨은 리스크',
+    '투자 신호', '새로운 흐름', '오늘 뉴스', '요즘 뉴스',
+    '지금 뉴스', '최신 뉴스', '최근 뉴스', '뉴스 요약',
+    '의외 신호', '시장 신호', '투자에 영향', '투자 영향',
+]
+
+def _pre_route_news_signal(question: str) -> str | None:
+    """
+    의외의 신호 키워드 기반 즉시 라우팅.
+    LLM이 fallback으로 오분류하는 것 방지.
+    """
+    q = question
+    q_lower = q.lower()
+    # 뉴스 관련 직접 표현
+    if any(kw in q for kw in _NEWS_SIGNAL_SUMMARY_KW):
+        return "news_signal_summary"
+    # "뉴스" 단독 + 상세 트리거 없음 → summary
+    if '뉴스' in q and not any(t in q for t in _DETAIL_TRIGGERS):
+        return "news_signal_summary"
+    return None
+
+
 def _pre_route_schedule(question: str) -> str | None:
     """
     LLM 호출 전 일정/이벤트 카테고리 키워드 기반 즉시 라우팅.
@@ -204,6 +232,9 @@ def route(question: str, llm: LLMClient) -> dict:
         }
     """
     # 1차: 카테고리 키워드 기반 즉시 분류 (LLM 오분류 방지)
+    pre = _pre_route_news_signal(question)
+    if pre:
+        return {"intent": pre, "confidence": 0.95, "required_tables": INTENT_TABLE_MAP.get(pre, []), "is_lookup": True}
     pre = _pre_route_schedule(question)
     if pre:
         return {"intent": pre, "confidence": 0.95, "required_tables": INTENT_TABLE_MAP.get(pre, []), "is_lookup": True}

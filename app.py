@@ -46,9 +46,23 @@ def get_holding_signals(
     return {"holdings": db.get_holding_signals(customer_id, limit)}
 
 
+# ── 의외의 신호 캐시 (홈 화면 ↔ 채팅 동일 결과 보장) ────────────────────
+import time as _time_mod
+_SIGNALS_CACHE: dict = {"data": None, "ts": 0.0}
+_SIGNALS_TTL = 60  # 60초 TTL: 홈/채팅 동시 로드 시 동일 데이터
+
+def _get_cached_signals(limit: int = 6) -> list:
+    """TTL 캐시로 홈 화면과 채팅이 동일한 신호 목록 반환"""
+    now = _time_mod.monotonic()
+    if _SIGNALS_CACHE["data"] is None or (now - _SIGNALS_CACHE["ts"]) > _SIGNALS_TTL:
+        _SIGNALS_CACHE["data"] = db.get_unexpected_signals(max(limit, 6))
+        _SIGNALS_CACHE["ts"] = now
+    return _SIGNALS_CACHE["data"][:limit]
+
 @app.get("/api/unexpected-signals")
 def get_unexpected_signals(limit: int = Query(default=4, le=10)):
-    """[화면1] 지금 주목할만한 의외의 신호"""
+    """[화면1] 의외의 신호 목록 (TTL 캐시 적용)"""
+    return {"signals": _get_cached_signals(limit)}
     return {"signals": db.get_unexpected_signals(limit)}
 
 
@@ -1085,6 +1099,8 @@ def chat_v2(req: ChatRequest):
             _filter = next((t for t in ["공격형 투자", "장기형 투자", "금상"] if t in _q), None)
             card_data = build_expert_movement_detail(data, _filter or "")
         elif intent == "news_signal_summary":
+            # 홈 화면과 동일한 데이터 소스·정렬 보장
+            data["news_feed"] = _get_cached_signals(6)  # 홈 화면과 동일 TTL 캐시
             card_type = "news_signal_summary"
             card_data = build_news_signal_summary(data, _q)
         elif intent == "news_signal_detail":
