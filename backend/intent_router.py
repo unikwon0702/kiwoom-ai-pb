@@ -116,7 +116,7 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - market_event_summary: 이벤트/시황 리스트 (지금 뜨는 이벤트, 이벤트·시황 보여줘, 오늘 주목할 이슈)
 - market_event_detail: 특정 이벤트/시황 상세 (이벤트 제목으로 상세 요청)
 - upcoming_schedule_summary: 다가오는 일정 리스트 (다가오는 일정, 앞으로 확인할 투자 일정, 이번 주 일정)
-- upcoming_schedule_detail: 특정 일정 상세 (일정명으로 상세 요청)
+- upcoming_schedule_detail: 특정 일정 상세 (일정명으로 상세 요청, FOMC 금리결정/연준 회의/실적발표/배당 등 일정 이벤트 상세)
 - expert_movement_detail: 고수 전체 움직임 (고수들 지금 어떻게 움직여, 투자고수 움직임, 고수 매매 흐름)
 - expert_type_detail: 특정 유형 고수 (공격형 고수, 장기형 고수, 금상 고수)
 - news_signal_summary: 의외의 신호 뉴스 리스트 (뉴스 알려줘, 지금 주목할 뉴스, 의외의 신호, 시장 뉴스 요약)
@@ -133,13 +133,15 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - "매도", "리밸런싱", "비중 조정" → rebalancing_recommendation
 - "위험", "알림", "주의" → risk_alert
 - "진단", "분석", "종합" → portfolio_diagnosis
-- "시장", "코스피", "금리", "환율" → market_context_analysis
+- "FOMC", "금리결정", "연준 회의", "기준금리 결정", "FOMC 금리" → upcoming_schedule_detail (시장 전망이 아닌 이벤트/일정 상세)
+- "시장", "코스피", "금리 전망", "금리 수준", "환율" → market_context_analysis (단, "금리결정"/"FOMC"는 upcoming_schedule_detail)
 - "내 투자 변동", "보유 종목 변동", "최근 내 투자 상황" → investment_change_summary
 - 보유 종목 이름(예: TIGER 글로벌메타버스) 단독 or + "알려줘/상세" → investment_change_detail
 - "이벤트 알려줘", "시황 보여줘", "주목할 이슈" → market_event_summary
 - 이벤트 제목 그대로 질문 → market_event_detail
 - "다가오는 일정", "투자 일정" → upcoming_schedule_summary
-- 일정 제목 + "알려줘/상세" → upcoming_schedule_detail
+- 일정/이벤트 제목(FOMC 금리결정, 실적발표, 주총, 배당, ELS 평가 등) + "알려줘/상세/보여줘" → upcoming_schedule_detail
+- "FOMC" 단독 또는 + "알려줘/금리결정/회의" → upcoming_schedule_detail (NOT market_context_analysis)
 - "고수", "투자 고수" + 단독/전체 → expert_movement_detail
 - 특정 유형(공격형/장기형/금상) + "고수" → expert_type_detail
 - "뉴스 알려줘", "의외의 신호", "시장 뉴스 요약" → news_signal_summary
