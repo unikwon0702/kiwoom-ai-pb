@@ -162,18 +162,18 @@ export function HoldingDetailContent({
       </section>
 
       {/* 비교 차트 */}
-      {chart && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-              <span>📉</span><span>{chart.title ?? "코스피 대비 수익률 (최근 1개월)"}</span>
-            </div>
-            {chart.gap && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--info-soft)] text-[color:var(--info)]">
-                <TrendingDown className="size-3" /> 격차 {chart.gap}
-              </span>
-            )}
+      <section className="space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+            <span>📉</span><span>{chart?.title ?? "코스피 대비 수익률 (최근 1개월)"}</span>
           </div>
+          {chart?.gap && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--info-soft)] text-[color:var(--info)]">
+              <TrendingDown className="size-3" /> 격차 {chart.gap}
+            </span>
+          )}
+        </div>
+        {chart ? (
           <div className="rounded-2xl border border-border/60 bg-card px-3 pt-3 pb-2">
             <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -188,10 +188,14 @@ export function HoldingDetailContent({
                 </LineChart>
               </ResponsiveContainer>
             </div>
+            {chart.caption && <p className="text-[12.5px] text-muted-foreground leading-relaxed pt-1">{chart.caption}</p>}
           </div>
-          {chart.caption && <p className="text-[12.5px] text-muted-foreground leading-relaxed pt-1">{chart.caption}</p>}
-        </section>
-      )}
+        ) : (
+          <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-5 flex items-center justify-center">
+            <p className="text-[13px] text-muted-foreground">수익률 차트 데이터를 준비 중이에요</p>
+          </div>
+        )}
+      </section>
 
       {/* 이유 */}
       <section className="space-y-2">
@@ -222,11 +226,11 @@ export function HoldingDetailContent({
       </section>
 
       {/* 히스토리 */}
-      {history && history.length > 0 && (
-        <section className="space-y-3">
-          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-            <span>📈</span><span>예전에는 이런 일이 일어났어요</span>
-          </div>
+      <section className="space-y-3">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+          <span>📈</span><span>예전에는 이런 일이 일어났어요</span>
+        </div>
+        {history && history.length > 0 ? (
           <ol className="relative space-y-2.5 pl-4">
             <span className="absolute left-1.5 top-2 bottom-2 w-px bg-border" />
             {history.map((h, i) => {
@@ -252,8 +256,12 @@ export function HoldingDetailContent({
               );
             })}
           </ol>
-        </section>
-      )}
+        ) : (
+          <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-4">
+            <p className="text-[13px] text-muted-foreground">아직 기록된 과거 사례가 없어요</p>
+          </div>
+        )}
+      </section>
 
       {/* 고수들의 평가 */}
       {!hideMasters && (

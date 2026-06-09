@@ -89,7 +89,7 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
       } catch {}
     }
     return {
-      tag: '보유',
+      tag: h.holding_type === '관심' ? '관심' : '보유',
       title: h.asset_name ?? '',
       time: getDisplayTime(h.date, i),
       desc,
@@ -308,7 +308,7 @@ export function CurrentSituation() {
           <HoldingCard key={it.title} it={it} onClick={() => handleHoldingClick(it)} />
         ))}
       </Section>
-      <Section emoji="🔍" title="지금뜨는 이벤트·시황" subtitle="시장에서 주목받는 이슈와 그 영향을 알려드려요">
+      <Section emoji="🔍" title="지금 뜨는 이벤트·시황" subtitle="시장에서 주목받는 이슈와 그 영향을 알려드려요">
         <SummaryBlock icon="✨" label="AI 요약">
           {situationData?.market_context?.summary || '요약을 불러오는 중이에요...'}
         </SummaryBlock>

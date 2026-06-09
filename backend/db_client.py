@@ -166,6 +166,7 @@ class DBClient:
               WHERE n.event_type = '뉴스'
                 AND n.ai_investment_view IS NOT NULL
                 AND n.impacted_assets_json IS NOT NULL
+                AND n.published_at >= CURRENT_DATE() - 30
                 AND n.event_title NOT LIKE '%[속보]%'
                 AND n.event_title NOT LIKE '%마감%'
                 AND n.event_title NOT LIKE '%전일 대비%'
@@ -608,8 +609,11 @@ class DBClient:
         else:
             reasons_list = interpretations[:4] if interpretations else ["시그널 데이터를 분석 중이에요."]
 
+        # 보유/관심 태그 추론: holding_info가 비어 있으면 관심 자산
+        inferred_tag = '관심' if not holding_info else '보유'
+
         return {
-            "tag": '보유',
+            "tag": inferred_tag,
             "title": asset_name,
             "summary": summary,
             "summarySub": summary_sub,
