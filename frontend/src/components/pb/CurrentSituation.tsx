@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { tagClassName } from "./tag-style";
@@ -41,6 +41,14 @@ function SummaryBlock({ icon, label, children }: { icon: string; label: string; 
         <span>{label}</span>
       </div>
       <p className="text-[12.5px] leading-relaxed text-foreground/85">{children}</p>
+    </div>
+  );
+}
+
+function SituationSectionHeader({ title }: { title: string }) {
+  return (
+    <div className="px-5 pb-3">
+      <h2 className="text-[17px] font-bold text-foreground tracking-tight">{title}</h2>
     </div>
   );
 }
@@ -212,18 +220,37 @@ function ScheduleCard({ it, onClick }: { it: Schedule; onClick?: () => void }) {
   );
 }
 
-function Section({ emoji, title, subtitle, children }: { emoji: string; title: string; subtitle: string; children: React.ReactNode }) {
+function Section({ emoji, title, subtitle, children, moreTab }: {
+  emoji?: string;
+  title?: string;
+  subtitle: string;
+  children: React.ReactNode;
+  moreTab?: "holdings" | "market" | "schedule";
+}) {
   return (
     <div className="px-5">
       <div className="bg-card rounded-2xl border border-border/70 overflow-hidden">
         <div className="bg-[#606CF2] px-4 py-3">
-          <div className="flex items-center gap-1.5 text-[14.5px] font-semibold text-white">
-            <span className="text-[15px] leading-none">{emoji}</span>
-            {title}
-          </div>
-          <p className="mt-0.5 text-[11.5px] text-white/80 leading-snug">{subtitle}</p>
+          {title && (
+            <div className="flex items-center gap-1.5 text-[14.5px] font-semibold text-white">
+              {emoji && <span className="text-[15px] leading-none">{emoji}</span>}
+              {title}
+            </div>
+          )}
+          <p className={`${title ? "mt-0.5" : ""} text-[11.5px] text-white/80 leading-snug`}>{subtitle}</p>
         </div>
-        <div className="space-y-2 px-4 pt-2 pb-3">{children}</div>
+        <div className="space-y-2 px-4 pt-2 pb-3">
+          {children}
+          {moreTab && (
+            <Link
+              to="/notifications"
+              search={{ tab: moreTab }}
+              className="block w-full text-center text-[12.5px] text-muted-foreground hover:text-foreground transition-colors pt-2 pb-1"
+            >
+              지난 알림 더보기 →
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -299,8 +326,8 @@ export function CurrentSituation() {
   };
 
   return (
-    <div className="space-y-4 pb-6">
-      <Section emoji="💡" title="내 투자 변동" subtitle="보유·관심 상품의 주요 변동을 한눈에 모아드려요">
+    <div className="pb-6">
+      <Section emoji="💡" title="내 투자 변동" subtitle="보유·관심 상품의 주요 변동을 한눈에 모아드려요" moreTab="holdings">
         <SummaryBlock icon="✨" label="AI 요약">
           {situationData?.investment_change?.summary || '요약을 불러오는 중이에요...'}
         </SummaryBlock>
@@ -308,22 +335,28 @@ export function CurrentSituation() {
           <HoldingCard key={it.title} it={it} onClick={() => handleHoldingClick(it)} />
         ))}
       </Section>
-      <Section emoji="🔍" title="지금 뜨는 이벤트·시황" subtitle="시장에서 주목받는 이슈와 그 영향을 알려드려요">
-        <SummaryBlock icon="✨" label="AI 요약">
-          {situationData?.market_context?.summary || '요약을 불러오는 중이에요...'}
-        </SummaryBlock>
-        {markets.map((it) => (
-          <MarketCard key={it.title} it={it} onClick={() => handleMarketClick(it)} />
-        ))}
-      </Section>
-      <Section emoji="📅" title="다가오는 일정" subtitle="놓치면 안 될 투자 일정을 챙겨드려요">
-        <SummaryBlock icon="✨" label="AI 요약">
-          {situationData?.upcoming_schedule?.summary || '요약을 불러오는 중이에요...'}
-        </SummaryBlock>
-        {schedules.map((it) => (
-          <ScheduleCard key={it.title} it={it} onClick={() => handleScheduleClick(it)} />
-        ))}
-      </Section>
+      <div className="pt-8">
+        <SituationSectionHeader title="지금 뜨는 이벤트·시황" />
+        <Section subtitle="시장에서 주목받는 이슈와 그 영향을 알려드려요" moreTab="market">
+          <SummaryBlock icon="✨" label="AI 요약">
+            {situationData?.market_context?.summary || '요약을 불러오는 중이에요...'}
+          </SummaryBlock>
+          {markets.map((it) => (
+            <MarketCard key={it.title} it={it} onClick={() => handleMarketClick(it)} />
+          ))}
+        </Section>
+      </div>
+      <div className="pt-8">
+        <SituationSectionHeader title="다가오는 일정" />
+        <Section subtitle="놓치면 안 될 투자 일정을 챙겨드려요" moreTab="schedule">
+          <SummaryBlock icon="✨" label="AI 요약">
+            {situationData?.upcoming_schedule?.summary || '요약을 불러오는 중이에요...'}
+          </SummaryBlock>
+          {schedules.map((it) => (
+            <ScheduleCard key={it.title} it={it} onClick={() => handleScheduleClick(it)} />
+          ))}
+        </Section>
+      </div>
             {(() => {
         const scheduleProps: Record<string, any> = {};
 

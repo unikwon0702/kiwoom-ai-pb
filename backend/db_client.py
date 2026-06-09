@@ -569,6 +569,31 @@ class DBClient:
             except:
                 pass
 
+        # 7. MasterTradeChart 데이터
+        chart_groups_rows = self._execute(f"""
+            SELECT investor_group_key, investor_group_label,
+                   trade_label, buy_volume, sell_volume,
+                   highlight_type, highlight_note
+            FROM dev.ai_pb_gold.app_cache_master_trade_chart
+            WHERE asset_name = '{asset_name}'
+            ORDER BY investor_group_key, trade_date ASC
+        """)
+        chart_groups = []
+        if chart_groups_rows:
+            from collections import defaultdict as _dd
+            _gd = _dd(list)
+            _gl = {}
+            for _r in chart_groups_rows:
+                _k = _r['investor_group_key']
+                _gl[_k] = _r['investor_group_label']
+                _pt = {"date": _r['trade_label'], "buy": _r['buy_volume'], "sell": _r['sell_volume']}
+                if _r.get('highlight_type'):
+                    _pt["highlight"] = {"type": _r['highlight_type'], "note": _r['highlight_note'] or ""}
+                _gd[_k].append(_pt)
+            for _k in ["aggressive", "longterm"]:
+                if _k in _gd:
+                    chart_groups.append({"key": _k, "label": _gl[_k], "data": _gd[_k]})
+
         # 조합
         diag = diagnosis[0] if diagnosis else {}
         hold = holding_info[0] if holding_info else {}
@@ -656,4 +681,6 @@ class DBClient:
             "pollLabel": poll_label,
             "aiPbSummary": f"투자고수 {total}팀 중 {buy_count}팀이 매수, {sell_count}팀이 매도 흐름이에요." if total > 0 else None,
             "history": history if history else None,
+            "chartGroups": chart_groups if chart_groups else None,
+            "masterMode": "chart" if chart_groups else "simple",
         }

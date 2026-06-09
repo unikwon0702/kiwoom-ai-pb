@@ -1,8 +1,9 @@
 import { tagClassName } from "./tag-style";
-import { TrendingUp, TrendingDown, X, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, X } from "lucide-react";
 import { AiChatCta } from "./AiChatCta";
+import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, ReferenceDot, Tooltip } from "recharts";
 
 export type Master = {
   emoji: string;
@@ -17,6 +18,15 @@ export type HistoryEvent = {
   direction: "up" | "down";
   text: string;
 };
+
+export type TradePoint = {
+  date: string;
+  buy: number;
+  sell: number;
+  highlight?: { type: "buy" | "sell"; note: string };
+};
+
+export type ChartGroup = { key: string; label: string; data: TradePoint[] };
 
 export type HoldingDetailContentProps = {
   tag?: string;
@@ -37,6 +47,8 @@ export type HoldingDetailContentProps = {
   aiPbSummary?: string;
   pollLabel?: string;
   mastersDefaultOpen?: boolean;
+  masterMode?: "chart" | "simple";
+  chartGroups?: ChartGroup[];
   history?: HistoryEvent[];
   chart?: {
     title?: string;
@@ -50,6 +62,97 @@ export type HoldingDetailContentProps = {
   onClose?: () => void;
   onGoChat?: () => void;
 };
+
+function MasterTradeChart({ groups }: { groups: ChartGroup[] }) {
+  const [groupKey, setGroupKey] = useState<string>(groups[0].key);
+  const active = groups.find((g) => g.key === groupKey) ?? groups[0];
+  const data = active.data;
+  const highlights = data.filter((d) => d.highlight);
+
+  return (
+    <div className="space-y-3.5">
+      <div
+        className="grid gap-1.5 rounded-full bg-muted/60 p-1"
+        style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}
+      >
+        {groups.map((opt) => {
+          const isActive = groupKey === opt.key;
+          return (
+            <button
+              key={opt.key}
+              onClick={() => setGroupKey(opt.key)}
+              className={`text-[12.5px] font-semibold py-2 rounded-full transition-colors ${
+                isActive ? "bg-foreground text-background" : "text-muted-foreground"
+              }`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <div className="h-[200px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 12, right: 12, left: -8, bottom: 14 }}>
+            <CartesianGrid stroke="oklch(0.9 0.005 260)" strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: "oklch(0.55 0.02 260)" }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: "날짜", position: "insideBottom", offset: -6, style: { fontSize: 9, fill: "oklch(0.55 0.02 260)" } }}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: "oklch(0.55 0.02 260)" }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: "거래량", angle: -90, position: "insideLeft", offset: 16, style: { fontSize: 9, fill: "oklch(0.55 0.02 260)", textAnchor: "middle" } }}
+            />
+            <Tooltip
+              cursor={{ stroke: "oklch(0.85 0.005 260)", strokeWidth: 1 }}
+              contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid oklch(0.9 0.005 260)" }}
+            />
+            <Legend verticalAlign="top" height={22} iconType="plainline" wrapperStyle={{ fontSize: 11 }} />
+            <Line type="monotone" dataKey="buy" name="매수" stroke="var(--pos)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            <Line type="monotone" dataKey="sell" name="매도" stroke="var(--neg)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            {highlights.map((h, i) => (
+              <ReferenceDot
+                key={i}
+                x={h.date}
+                y={h.highlight!.type === "buy" ? h.buy : h.sell}
+                r={5}
+                fill={h.highlight!.type === "buy" ? "var(--pos)" : "var(--neg)"}
+                stroke="white"
+                strokeWidth={2}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="rounded-xl bg-muted/40 px-3.5 py-3 space-y-2">
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+          <span>💡</span>
+          <span>이런 상황에서 고수들은 이렇게 움직였어요</span>
+        </div>
+        <ul className="space-y-2">
+          {[...highlights].reverse().map((h, i) => {
+            const isBuy = h.highlight!.type === "buy";
+            return (
+              <li key={i} className="flex items-start gap-2">
+                <span className={`shrink-0 mt-0.5 inline-flex items-center gap-1 text-[10.5px] font-bold px-1.5 py-0.5 rounded-md tabular-nums ${
+                  isBuy ? "bg-[color:var(--pos-soft)] text-[color:var(--pos)]" : "bg-[color:var(--neg-soft)] text-[color:var(--neg)]"
+                }`}>
+                  {isBuy ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                  {h.date}
+                </span>
+                <span className="text-[13px] text-foreground/85 leading-relaxed">{h.highlight!.note}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 export function BuyGauge({ buyCount, sellCount, pollLabel }: { buyCount: number; sellCount: number; pollLabel?: string }) {
   const total = buyCount + sellCount;
@@ -127,14 +230,16 @@ export function HoldingDetailContent({
   inChat = false,
   onClose,
   onGoChat,
+  masterMode = "simple",
+  chartGroups,
 }: HoldingDetailContentProps) {
-  const [showMasters, setShowMasters] = useState(mastersDefaultOpen);
   const defaultMasters: Master[] = [
     { emoji: "🔥", name: "공격형 고수", note: "추가 매수 진행 중", action: "매수" },
     { emoji: "💎", name: "장기형 고수", note: "장기 보유 유지", action: "매수" },
     { emoji: "🏅", name: "금상 고수", note: "일부 차익 실현", action: "매도" },
   ];
   const mastersList = masters ?? defaultMasters;
+  const navigate = useNavigate();
 
   return (
     <div className={inChat ? "px-6 pt-4 pb-3 space-y-7" : "px-6 pt-4 pb-3 space-y-7 max-h-[78vh] overflow-y-auto"}>
@@ -154,26 +259,28 @@ export function HoldingDetailContent({
 
       {/* AI가 내린 결론 */}
       <section className="space-y-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-          <span>{summaryIcon}</span><span>{summaryLabel}</span>
+        <div className="rounded-2xl bg-muted/40 px-4 py-3.5 space-y-2">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+            <span>{summaryIcon}</span><span>{summaryLabel}</span>
+          </div>
+          <p className="text-[16px] font-bold text-foreground leading-snug">{summary}</p>
+          <p className="text-[13.5px] text-muted-foreground leading-relaxed">{summarySub}</p>
         </div>
-        <p className="text-[16px] font-bold text-foreground leading-snug">{summary}</p>
-        <p className="text-[13.5px] text-muted-foreground leading-relaxed">{summarySub}</p>
       </section>
 
       {/* 비교 차트 */}
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-            <span>📉</span><span>{chart?.title ?? "코스피 대비 수익률 (최근 1개월)"}</span>
+      {chart && (
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+              <span>📉</span><span>{chart.title ?? "코스피 대비 수익률 (최근 1개월)"}</span>
+            </div>
+            {chart.gap && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--info-soft)] text-[color:var(--info)]">
+                <TrendingDown className="size-3" /> 격차 {chart.gap}
+              </span>
+            )}
           </div>
-          {chart?.gap && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--info-soft)] text-[color:var(--info)]">
-              <TrendingDown className="size-3" /> 격차 {chart.gap}
-            </span>
-          )}
-        </div>
-        {chart ? (
           <div className="rounded-2xl border border-border/60 bg-card px-3 pt-3 pb-2">
             <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -190,12 +297,8 @@ export function HoldingDetailContent({
             </div>
             {chart.caption && <p className="text-[12.5px] text-muted-foreground leading-relaxed pt-1">{chart.caption}</p>}
           </div>
-        ) : (
-          <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-5 flex items-center justify-center">
-            <p className="text-[13px] text-muted-foreground">수익률 차트 데이터를 준비 중이에요</p>
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* 이유 */}
       <section className="space-y-2">
@@ -226,11 +329,11 @@ export function HoldingDetailContent({
       </section>
 
       {/* 히스토리 */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-          <span>📈</span><span>예전에는 이런 일이 일어났어요</span>
-        </div>
-        {history && history.length > 0 ? (
+      {history && history.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+            <span>📈</span><span>예전에는 이런 일이 일어났어요</span>
+          </div>
           <ol className="relative space-y-2.5 pl-4">
             <span className="absolute left-1.5 top-2 bottom-2 w-px bg-border" />
             {history.map((h, i) => {
@@ -256,12 +359,8 @@ export function HoldingDetailContent({
               );
             })}
           </ol>
-        ) : (
-          <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-4">
-            <p className="text-[13px] text-muted-foreground">아직 기록된 과거 사례가 없어요</p>
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* 고수들의 평가 */}
       {!hideMasters && (
@@ -269,66 +368,57 @@ export function HoldingDetailContent({
           <div className="rounded-2xl border border-border/60 bg-card overflow-hidden">
             <div className="px-4 pt-4 pb-3">
               <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
-                <span>🏆</span><span>고수들은 어제까지 이 종목을 이렇게 거래했어요</span>
+                <span>🏆</span><span>고수들은 최근에 이 종목을 이렇게 거래했어요</span>
               </div>
-              <p className="mt-1 text-[12px] text-muted-foreground/80 leading-relaxed">어떤 흐름이 있었는지 한눈에 확인해보세요</p>
+              <p className="mt-1 text-[12px] text-muted-foreground/80 leading-relaxed">
+                {masterMode === "chart"
+                  ? "고수 그룹을 선택하면 일별 매수·매도 추이를 볼 수 있어요"
+                  : "어떤 흐름이 있었는지 한눈에 확인해보세요"}
+              </p>
             </div>
             <div className="h-px bg-border/60 mx-4" />
-            <div className="px-4 pt-4 pb-2">
-              <BuyGauge buyCount={buyCount} sellCount={sellCount} pollLabel={pollLabel} />
-            </div>
-            {aiPbSummary && (
-              <>
-                <div className="h-px bg-border/60 mx-4" />
-                <div className="px-4 py-3 flex gap-2">
-                  <span className="text-[14px]">🤖</span>
-                  <div className="text-[13px] leading-relaxed">
-                    <div className="font-semibold text-foreground/90 mb-0.5">AI PB 한줄 요약</div>
-                    <p className="text-foreground/80">{aiPbSummary}</p>
-                  </div>
-                </div>
-              </>
-            )}
-            {!hideMasterDetails && (
-              <>
-                <div className="h-px bg-border/60 mx-4" />
-                <button onClick={() => setShowMasters((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
-                  <span className="text-[13px] font-semibold text-foreground">고수 자세히 보기</span>
-                  <ChevronDown className={`size-4 text-muted-foreground transition-transform ${showMasters ? "rotate-180" : ""}`} />
-                </button>
-                {showMasters && (
-                  <div className="px-4 pb-4 grid grid-cols-1 gap-2">
+            <div className="px-4 pt-4 pb-4">
+              {masterMode === "chart" && chartGroups && chartGroups.length > 0 ? (
+                <MasterTradeChart groups={chartGroups} />
+              ) : (
+                <div className="space-y-2.5">
+                  {aiPbSummary && (
+                    <div className="rounded-xl bg-muted/40 px-3.5 py-3 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
+                        <span>🤖</span><span>AI PB 한줄 요약</span>
+                      </div>
+                      <p className="text-[13px] text-foreground/85 leading-relaxed">{aiPbSummary}</p>
+                    </div>
+                  )}
+                  <div className="space-y-2">
                     {mastersList.map((m, i) => {
                       const isBuy = m.action === "매수";
                       return (
-                        <div key={i} className="flex items-center justify-between rounded-xl border border-border/60 px-3.5 py-3">
+                        <div key={i} className="flex items-center justify-between rounded-xl bg-muted/30 px-3.5 py-3">
                           <div className="flex items-center gap-2.5">
-                            <span className={`size-7 rounded-full flex items-center justify-center text-[13px] ${
-                              isBuy ? "bg-[color:var(--pos-soft)]" : "bg-[color:var(--neg-soft)]"
-                            }`}>{m.emoji}</span>
+                            <span className="text-[18px]">{m.emoji}</span>
                             <div>
-                              <div className="text-[13px] font-semibold text-foreground">{m.name}</div>
-                              <div className="text-[11.5px] text-muted-foreground">{m.note}</div>
+                              <p className="text-[13px] font-bold text-foreground">{m.name}</p>
+                              {!hideMasterDetails && (
+                                <p className="text-[12px] text-muted-foreground mt-0.5">{m.note}</p>
+                              )}
                             </div>
                           </div>
-                          <span className={`flex items-center gap-1 text-[12px] font-bold ${
-                            isBuy ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"
-                          }`}>
-                            {isBuy ? <TrendingUp className="size-3.5" /> : <TrendingDown className="size-3.5" />} {m.action}
-                          </span>
+                          <span className={`shrink-0 text-[11px] font-bold px-2 py-1 rounded-full ${
+                            isBuy ? "bg-[color:var(--pos-soft)] text-[color:var(--pos)]" : "bg-[color:var(--neg-soft)] text-[color:var(--neg)]"
+                          }`}>{m.action}</span>
                         </div>
                       );
                     })}
                   </div>
-                )}
-              </>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </section>
       )}
 
-      {!inChat && onGoChat && <AiChatCta onClick={onGoChat} />}
+      {!inChat && <AiChatCta onClick={onGoChat ?? (() => navigate({ to: "/chat", search: {} }))} />}
     </div>
   );
 }
