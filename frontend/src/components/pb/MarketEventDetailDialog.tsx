@@ -201,18 +201,18 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId, customerI
                   <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
                     <span>🧭</span><span>어떤 자산이 영향을 받을까요?</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     {sectorTabs.map((s, i) => {
                       const isActive = i === activeTab;
                       const positive = s.impact === "positive";
                       return (
                         <button key={s.label} onClick={() => setActiveTab(i)}
-                          className={`flex-1 min-w-0 inline-flex items-center justify-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
+                          className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
                             isActive ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
                             : "bg-card text-foreground/80 border-border/60"
                           }`}>
-                          <span className="truncate">{s.label}</span>
-                          <span className={`inline-flex items-center text-[11px] shrink-0 ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
+                          <span>{s.label}</span>
+                          <span className={`inline-flex items-center text-[11px] ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
                             {positive ? <TrendingUp className="size-3" /> : s.impact === "negative" ? <TrendingDown className="size-3" /> : null}
                           </span>
                         </button>
