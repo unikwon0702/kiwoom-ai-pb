@@ -1,7 +1,7 @@
 import { Drawer, DrawerPortal, DrawerOverlay } from "@/components/ui/drawer";
 import { Drawer as DrawerPrimitive } from "vaul";
 import { useNavigate } from "@tanstack/react-router";
-import { X, Plus, Star, TrendingUp, TrendingDown, ChevronDown, Info } from "lucide-react";
+import { X, Plus, Star, Wallet, TrendingUp, TrendingDown, ChevronDown, Info } from "lucide-react";
 import { AiChatCta } from "./AiChatCta";
 import { useState, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,6 +11,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   eventId: string | null;
+  customerId?: string;
 };
 
 type Asset = {
@@ -28,17 +29,18 @@ type Asset = {
 
 type SectorGroup = {
   label: string;
-  impact: "positive" | "negative";
+  impact: "positive" | "negative" | "neutral";
   assets: Asset[];
 };
 
-export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) {
+export function MarketEventDetailDialog({ open, onOpenChange, eventId, customerId = 'CUST0010' }: Props) {
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
   const [showIndirect, setShowIndirect] = useState(false);
+  const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!open || !eventId) { setData(null); return; }
@@ -46,7 +48,7 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
     setActiveTab(0);
     setShowHistory(false);
     setShowIndirect(false);
-    api.getEventDetail(eventId)
+    api.getEventDetail(eventId, customerId)
       .then((d) => setData(d))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
@@ -86,7 +88,9 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
   });
   const sectorTabs: SectorGroup[] = Object.entries(sectorMap).map(([label, assets]) => {
     const positiveCount = assets.filter((a) => a.impact_direction === "긍정").length;
-    return { label, impact: positiveCount >= assets.length / 2 ? "positive" : "negative", assets };
+    const negativeCount = assets.filter((a) => a.impact_direction === "악재").length;
+    const impact = negativeCount > positiveCount ? "negative" : positiveCount > 0 ? "positive" : "neutral";
+    return { label, impact, assets };
   });
 
   const tab = sectorTabs[activeTab] ?? sectorTabs[0];
@@ -178,14 +182,16 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                   <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
                     <span>🤖</span><span>AI PB 의견</span>
                   </div>
-                  <ul className="space-y-2 text-[14px] text-foreground/90 leading-relaxed">
-                    {opinions.map((op: string, i: number) => (
-                      <li key={i} className="flex gap-2">
-                        <span className="text-muted-foreground/60 mt-2 size-1.5 rounded-full bg-current shrink-0" />
-                        <span>{op.trim()}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="rounded-2xl bg-muted/30 px-4 py-3.5">
+                    <ul className="space-y-2 text-[14px] text-foreground/90 leading-relaxed">
+                      {opinions.map((op: string, i: number) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="text-muted-foreground/60 mt-2 size-1.5 rounded-full bg-current shrink-0" />
+                          <span>{op.trim()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 </section>
               )}
 
@@ -195,19 +201,19 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                   <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
                     <span>🧭</span><span>어떤 자산이 영향을 받을까요?</span>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
+                  <div className="flex gap-2">
                     {sectorTabs.map((s, i) => {
                       const isActive = i === activeTab;
                       const positive = s.impact === "positive";
                       return (
                         <button key={s.label} onClick={() => setActiveTab(i)}
-                          className={`inline-flex items-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
+                          className={`flex-1 min-w-0 inline-flex items-center justify-center gap-1 text-[12px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors ${
                             isActive ? "bg-[color:var(--brand)] text-white border-[color:var(--brand)]"
                             : "bg-card text-foreground/80 border-border/60"
                           }`}>
-                          <span>{s.label}</span>
-                          <span className={`inline-flex items-center text-[11px] ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
-                            {positive ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}
+                          <span className="truncate">{s.label}</span>
+                          <span className={`inline-flex items-center text-[11px] shrink-0 ${isActive ? "opacity-90" : positive ? "text-[color:var(--pos)]" : "text-[color:var(--neg)]"}`}>
+                            {positive ? <TrendingUp className="size-3" /> : s.impact === "negative" ? <TrendingDown className="size-3" /> : null}
                           </span>
                         </button>
                       );
@@ -222,13 +228,38 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                       <ul className="space-y-2">
                         {tab.assets.map((a) => (
                           <li key={a.asset_name} className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                            <div className={`size-8 rounded-full flex items-center justify-center shrink-0 ${
+                              a.impact_direction === "긍정" ? "bg-[color:var(--pos)]/15" :
+                              a.impact_direction === "악재" ? "bg-[color:var(--neg)]/15" : "bg-muted/60"
+                            }`}>
+                              {a.impact_direction === "긍정" ? <TrendingUp className="size-4 text-[color:var(--pos)]" /> :
+                               a.impact_direction === "악재" ? <TrendingDown className="size-4 text-[color:var(--neg)]" /> :
+                               <span className="text-[11px] font-bold text-muted-foreground">-</span>}
+                            </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-[13.5px] font-semibold text-foreground truncate">{a.asset_name}</span>
                                 <span className="text-[10.5px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{a.asset_type}</span>
-                                {a.impact_direction === "긍정"
-                                  ? <TrendingUp className="size-3.5 text-[color:var(--pos)]" />
-                                  : <TrendingDown className="size-3.5 text-[color:var(--neg)]" />}
+                                {a.holding === "보유" && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[color:var(--brand)]/15 text-[color:var(--brand)]">
+                                    <Wallet className="size-2.5" />보유
+                                  </span>
+                                )}
+                                {a.holding === "관심" && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                    <Star className="size-2.5 fill-current" />관심
+                                  </span>
+                                )}
+                                {!a.holding && (
+                                  <button
+                                    onClick={() => setWatchlist(prev => { const s = new Set(prev); s.has(a.asset_name) ? s.delete(a.asset_name) : s.add(a.asset_name); return s; })}
+                                    className={`inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${
+                                      watchlist.has(a.asset_name) ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700" : "bg-muted/60 text-muted-foreground border-border/60"
+                                    }`}>
+                                    {watchlist.has(a.asset_name) ? <Star className="size-2.5 fill-current" /> : <Plus className="size-2.5" />}
+                                    {watchlist.has(a.asset_name) ? "관심" : "관심 추가"}
+                                  </button>
+                                )}
                               </div>
                               <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason || shortReasonsMap[a.asset_name] || ""}</p>
                             </div>
@@ -265,13 +296,28 @@ export function MarketEventDetailDialog({ open, onOpenChange, eventId }: Props) 
                     <ul className="space-y-2">
                       {indirectAssets.slice(0, 5).map((a) => (
                         <li key={a.asset_name} className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                          <div className={`size-8 rounded-full flex items-center justify-center shrink-0 ${
+                            a.impact_direction === "긍정" ? "bg-[color:var(--pos)]/15" :
+                            a.impact_direction === "악재" ? "bg-[color:var(--neg)]/15" : "bg-muted/60"
+                          }`}>
+                            {a.impact_direction === "긍정" ? <TrendingUp className="size-4 text-[color:var(--pos)]" /> :
+                             a.impact_direction === "악재" ? <TrendingDown className="size-4 text-[color:var(--neg)]" /> :
+                             <span className="text-[11px] font-bold text-muted-foreground">-</span>}
+                          </div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-[13.5px] font-semibold text-foreground truncate">{a.asset_name}</span>
                               <span className="text-[10.5px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">{a.asset_type}</span>
-                              {a.impact_direction === "긍정"
-                                ? <TrendingUp className="size-3.5 text-[color:var(--pos)]" />
-                                : <TrendingDown className="size-3.5 text-[color:var(--neg)]" />}
+                              {a.holding === "보유" && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[color:var(--brand)]/15 text-[color:var(--brand)]">
+                                  <Wallet className="size-2.5" />보유
+                                </span>
+                              )}
+                              {a.holding === "관심" && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                  <Star className="size-2.5 fill-current" />관심
+                                </span>
+                              )}
                             </div>
                             <p className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{a.short_reason || shortReasonsMap[a.asset_name] || ""}</p>
                           </div>

@@ -133,9 +133,12 @@ def get_holding_detail(customer_id: str = Query(default="CUST0001"), asset_name:
 
 
 @app.get("/api/event-detail")
-def get_event_detail(event_id: str = Query(...)):
+def get_event_detail(
+    event_id: str = Query(...),
+    customer_id: str = Query(default="CUST0010")
+):
     """뉴스/이벤트 상세"""
-    data = db.get_event_detail(event_id)
+    data = db.get_event_detail(event_id, customer_id)
     if not data:
         raise HTTPException(404, f"Event {event_id} not found")
     return data
@@ -682,11 +685,13 @@ def chat_v2(req: ChatRequest):
             if _cached_news_check:
                 _q_lower_check = _q_stripped.lower()
                 _news_matched = next(
-                    (n for n in _cached_news_check if _q_lower_check and (
+                    (n for n in _cached_news_check if _q_lower_check and
+                     (n.get("enriched_headline") or "").lower() and  # 빈 headline 목록 방지 ("" in any_str == True 버그)
+                     (
                         (n.get("enriched_headline") or "").lower() == _q_lower_check or
                         _q_lower_check in (n.get("enriched_headline") or "").lower() or
                         (n.get("enriched_headline") or "").lower() in _q_lower_check
-                    )),
+                     )),
                     None
                 )
                 if _news_matched:

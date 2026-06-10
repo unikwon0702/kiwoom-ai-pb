@@ -79,8 +79,8 @@ export const api = {
   getHoldingDetail: (customerId: string, assetName: string) =>
     request<any>(`/holding-detail?customer_id=${customerId}&asset_name=${encodeURIComponent(assetName)}`),
 
-  getEventDetail: (eventId: string) =>
-    request<any>(`/event-detail?event_id=${eventId}`),
+  getEventDetail: (eventId: string, customerId = 'CUST0010') =>
+    request<any>(`/event-detail?event_id=${eventId}&customer_id=${customerId}`),
 
   getCustomerInterests: (customerId: string) =>
     request<{ interests: { asset_name: string; asset_type: string; asset_subtype: string; interest_type: string; display_rank: number; already_held_yn: string }[] }>(

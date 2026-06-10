@@ -407,6 +407,7 @@ export function CurrentSituation() {
         open={!!activeMarketEventId}
         onOpenChange={(o) => { if (!o) setActiveMarketEventId(null); }}
         eventId={activeMarketEventId}
+        customerId={customer.id}
       />
       <UpcomingScheduleDetailDialog
         open={!!activeScheduleId}
