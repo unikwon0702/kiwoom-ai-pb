@@ -87,8 +87,8 @@ function useCurrentSituationData(customerId: string): { holdings: Holding[]; mar
   const { data: schedulesData, loading: sLoading } = useSchedules(customerId, 3);
 
   const holdings: Holding[] = (holdingsData?.holdings ?? []).map((h: any, i: number) => {
-    // enriched_sections가 있으면 구어체 사용
-    let desc = h.signal_name ?? '';
+    // enriched_sections가 있으면 구어체 사용, 없으면 ai_summary fallback
+    let desc = h.ai_summary ?? h.signal_name ?? '';
     let subDesc = h.interpretation ?? '';
     if (h.enriched_sections) {
       try {

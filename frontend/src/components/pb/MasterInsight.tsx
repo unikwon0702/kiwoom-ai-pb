@@ -15,10 +15,16 @@ export function MasterInsight() {
   const [open, setOpen] = useState(false);
   const { data, loading } = useTopInvestors(3);
 
+  const TYPE_DISPLAY: Record<string, string> = {
+    '공격형 투자': '공격형 고수',
+    '금상': '분산형 고수',
+    '장기형 투자': '장기형 고수',
+  };
+
   const masters: Master[] = (data?.investors ?? []).map((inv: any, i: number) => ({
     rank: i + 1,
     emoji: inv.investor_emoji ?? '📊',
-    name: `${inv.investor_type} 고수`,
+    name: TYPE_DISPLAY[inv.investor_type] ?? `${inv.investor_type} 고수`,
     status: inv.short_status ?? '',
     tags: inv.tags_json ? JSON.parse(inv.tags_json) : [],
   }));

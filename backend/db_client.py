@@ -64,7 +64,7 @@ class DBClient:
         # 보유 자산 — 종목별 최신 1건 (상위 3종목) + enriched JOIN
         held = self._execute(f"""
             SELECT h.asset_name, h.signal_name, h.signal_category, h.interpretation,
-                   h.date, h.holding_type,
+                   h.date, h.holding_type, h.ai_summary, h.time_label,
                    e.sections_json AS enriched_sections
             FROM (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY asset_name ORDER BY date DESC, rn ASC) AS dedup_rn
@@ -300,7 +300,8 @@ class DBClient:
                        enriched_title, enriched_sections, layer_priority
                 FROM layer_macro WHERE rn = 1
             )
-            SELECT *
+            SELECT *,
+                   DATEDIFF(scheduled_date, CURRENT_DATE()) AS d_days
             FROM combined
             ORDER BY layer_priority ASC, scheduled_date ASC
             LIMIT {limit}
@@ -579,7 +580,7 @@ class DBClient:
     # ============================================================
     # Event Detail (뉴스 상세 + enriched content JOIN)
     # ============================================================
-    def get_event_detail(self, event_id: str, customer_id: str = 'CUST0010') -> dict:
+    def get_event_detail(self, event_id: str) -> dict:
         rows = self._execute(f"""
             SELECT n.event_id, n.event_title, n.event_type, n.event_subtype,
                    n.related_sector, n.related_theme, n.ai_investment_view,
@@ -596,36 +597,6 @@ class DBClient:
         if not rows:
             return {}
         event = rows[0]
-
-        # 고객 보유/관심 종목 조회 후 impacted_assets_json에 holding 필드 주입
-        try:
-            holding_rows = self._execute(f"""
-                SELECT DISTINCT asset_name FROM {self._t('app_cache_holding_signals')}
-                WHERE customer_id = '{customer_id}'
-            """)
-            held_set = {r['asset_name'] for r in holding_rows}
-
-            interest_rows = self._execute(f"""
-                SELECT DISTINCT asset_name FROM {self._t('gd_customer_interest_serving')}
-                WHERE customer_id = '{customer_id}'
-            """)
-            interest_set = {r['asset_name'] for r in interest_rows}
-
-            raw = event.get('impacted_assets_json')
-            if raw:
-                import json as _json
-                assets = _json.loads(raw) if isinstance(raw, str) else raw
-                for a in assets:
-                    name = a.get('asset_name', '')
-                    if name in held_set:
-                        a['holding'] = '보유'
-                    elif name in interest_set:
-                        a['holding'] = '관심'
-                    else:
-                        a['holding'] = None
-                event['impacted_assets_json'] = _json.dumps(assets, ensure_ascii=False)
-        except Exception:
-            pass
 
         # 섹터 신호 강도 추이 (최근 8주 주별)
         sector = event.get('related_sector', '')

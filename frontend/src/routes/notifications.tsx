@@ -150,10 +150,10 @@ function NotificationsPage() {
   const { data: schedulesRaw } = useSchedules(customer.id, 10);
 
   const holdingsItems: Holding[] = (holdingsRaw?.holdings ?? []).map((h: any, i: number) => ({
-    tag: h.signal_category === '관심' ? '관심' : '보유',
+    tag: h.holding_type === '관심' ? '관심' : '보유',
     title: h.asset_name ?? '',
-    time: getDisplayTime(h.date, i),
-    desc: h.signal_name ?? '',
+    time: h.time_label ?? getDisplayTime(h.date, i),
+    desc: h.ai_summary ?? h.signal_name ?? '',
     subDesc: h.interpretation ?? undefined,
   }));
 
@@ -165,9 +165,11 @@ function NotificationsPage() {
     relevance: '내가 보유·관심으로 등록한 자산과 관련이 높아요',
   }));
 
-  const scheduleItems: Schedule[] = (schedulesRaw?.schedules ?? []).map((s: any, i: number) => ({
-    dTag: `D-${i + 1}`,
-    date: s.published_at ? new Date(s.published_at).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' }) : '',
+  const scheduleItems: Schedule[] = (schedulesRaw?.schedules ?? []).map((s: any) => ({
+    dTag: s.d_days != null ? `D-${s.d_days}` : 'D-?',
+    date: s.scheduled_date
+      ? new Date(s.scheduled_date + 'T00:00:00').toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', weekday: 'short' })
+      : '',
     title: s.event_title ?? '',
     desc: s.event_summary ?? '',
   }));
