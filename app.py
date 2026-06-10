@@ -668,6 +668,31 @@ def chat_v2(req: ChatRequest):
             and any(t in req.question for t in _DETAIL_KW_POST)):
         intent = "upcoming_schedule_detail"
 
+    # Post-routing 안전망 2: 뉴스 카드 클릭 → news_signal_detail 강제
+    # NewsSignalSummaryCard에서 클릭한 enriched_headline이 그대로 질문으로 들어오므로
+    # 캐시된 뉴스 제목과 직접 매칭 → LLM 오분류(market_context 등) 방지
+    if intent not in ('news_signal_detail', 'news_signal_summary'):
+        _q_stripped = req.question
+        for _sfx in [' 알려줘', ' 상세히 알려줘', ' 자세히 알려줘', ' 상세', ' 보여줘', ' 설명해줘']:
+            if _q_stripped.endswith(_sfx):
+                _q_stripped = _q_stripped[:-len(_sfx)].strip()
+                break
+        if 0 < len(_q_stripped) <= 60:
+            _cached_news_check = _get_cached_signals(10)
+            if _cached_news_check:
+                _q_lower_check = _q_stripped.lower()
+                _news_matched = next(
+                    (n for n in _cached_news_check if _q_lower_check and (
+                        (n.get("enriched_headline") or "").lower() == _q_lower_check or
+                        _q_lower_check in (n.get("enriched_headline") or "").lower() or
+                        (n.get("enriched_headline") or "").lower() in _q_lower_check
+                    )),
+                    None
+                )
+                if _news_matched:
+                    intent = "news_signal_detail"
+                    logger.info(f"[V2] Post-routing: 뉴스 제목 매칭 → news_signal_detail ({_q_stripped[:30]})")
+
     confidence = route_result["confidence"]
 
     logger.info(f"[V2] Intent: {intent} (conf={confidence:.2f})")
