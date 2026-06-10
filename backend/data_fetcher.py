@@ -413,18 +413,16 @@ def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
         except Exception:
             pass
 
-    # why_notable: detail + insights.body
-    why_notable = []
-    if sections.get("detail"):
-        why_notable.append(sections["detail"])
-    for ins in sections.get("insights", []):
-        if ins.get("body"):
-            why_notable.append(ins["body"])
-    if not why_notable and target.get("ai_investment_view"):
-        why_notable = [target["ai_investment_view"]]
+    # 풍부한 enriched 필드 추출 (EventDetailDialog와 동일한 데이터 구조)
+    ai_investment_view = target.get("ai_investment_view", "")
+    detail_text = sections.get("detail", "")
+    causal_flow = sections.get("causal_flow", [])          # ["단계1", "단계2", "단계3"]
+    enriched_tag = sections.get("tag", "")                  # 헤더 배지
+    enriched_insights = sections.get("insights", [])        # [{"tag": ..., "body": ...}]
+    sector_impacts = sections.get("sector_impacts", [])     # [{"sector", "direction", "impact_pct"}]
 
     # hashtags: insights.tag
-    hashtags = [ins["tag"] for ins in sections.get("insights", []) if ins.get("tag")]
+    hashtags = [ins["tag"] for ins in enriched_insights if ins.get("tag")]
 
     # related_assets: short_reasons dict → list
     related_assets = [
@@ -432,15 +430,27 @@ def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
         for k, v in (sections.get("short_reasons") or {}).items()
     ]
 
-    # sector_impacts: 빈 배열 (enriched data에 직접 없음)
-    sector_impacts = []
+    # why_notable: backward compat (detail + insights.body)
+    why_notable = []
+    if detail_text:
+        why_notable.append(detail_text)
+    for ins in enriched_insights:
+        if ins.get("body"):
+            why_notable.append(ins["body"])
+    if not why_notable and ai_investment_view:
+        why_notable = [ai_investment_view]
 
     return {
         "title": title,
-        "why_notable": why_notable,
+        "enriched_tag": enriched_tag,
+        "ai_investment_view": ai_investment_view,
+        "detail_text": detail_text,
+        "causal_flow": causal_flow,
+        "enriched_insights": enriched_insights,
         "sector_impacts": sector_impacts,
         "hashtags": hashtags,
         "related_assets": related_assets,
+        "why_notable": why_notable,
     }
 
 
