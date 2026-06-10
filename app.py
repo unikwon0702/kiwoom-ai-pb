@@ -111,7 +111,7 @@ def get_customer_alerts(
 def get_situation_summary(customer_id: str = Query(default="CUST0010")):
     """홈 화면 AI 요약 문구 (고객별 개인화)"""
     data = db.get_situation_summary(customer_id)
-    if not data.get('customer_name'):
+    if not data.get('as_of_date'):
         raise HTTPException(404, f"No summary found for {customer_id}")
     return data
 
