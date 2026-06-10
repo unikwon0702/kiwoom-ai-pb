@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useState } from "react";
 
 export type NewsSignalDetailContentProps = {
   data: any;
@@ -22,15 +23,29 @@ function getCausalEmoji(step: string, idx: number): string {
 export function NewsSignalDetailContent({ data, inChat = false, onClose }: NewsSignalDetailContentProps) {
   if (!data) return null;
 
+  const [activeSector, setActiveSector] = useState(0);
+
   const causalFlow: string[] = data.causal_flow ?? [];
   const enrichedInsights: { tag: string; body: string }[] = data.enriched_insights ?? [];
   const sectorImpacts: { sector: string; direction: string; impact_pct?: number }[] = data.sector_impacts ?? [];
   const hashtags: string[] = data.hashtags ?? [];
-  const relatedAssets: { asset_name: string; asset_type?: string; reason?: string; holding?: boolean }[] = data.related_assets ?? [];
   const whyNotable: string[] = data.why_notable ?? [];
   const aiView: string = data.ai_investment_view ?? "";
   const detailText: string = data.detail_text ?? "";
   const enrichedTag: string = data.enriched_tag ?? "";
+  const totalCount: number = data.total_asset_count ?? 0;
+
+  // impacted_assets 섬터 탭 구성 (EventDetailDialog 동일 로직)
+  const impactedAssets: any[] = data.impacted_assets ?? [];
+  const directAssets = impactedAssets.filter((a: any) => a.relation_type === "직접");
+  const sectorGroups: Record<string, any[]> = {};
+  directAssets.forEach((a: any) => {
+    const k = a.sector || "기타";
+    if (!sectorGroups[k]) sectorGroups[k] = [];
+    sectorGroups[k].push(a);
+  });
+  const sectorKeys = Object.keys(sectorGroups);
+  const currentSectorAssets = sectorGroups[sectorKeys[activeSector]] ?? directAssets.slice(0, 5);
 
   const hasWhySection = aiView || detailText || causalFlow.length > 0 || sectorImpacts.length > 0 || whyNotable.length > 0;
 
@@ -162,31 +177,58 @@ export function NewsSignalDetailContent({ data, inChat = false, onClose }: NewsS
         </section>
       )}
 
-      {/* 어떤 종목이 움직일까요? */}
-      {(relatedAssets.length > 0 || hashtags.length > 0) && (
-        <section className="space-y-2.5">
+      {/* 어떤 종목이 움직일까요? (EventDetailDialog 동일 인터랙티브 구조) */}
+      {(sectorKeys.length > 0 || hashtags.length > 0 || impactedAssets.length > 0) && (
+        <section className="space-y-3">
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-muted-foreground tracking-wide">
             <span>🧭</span><span>어떤 종목이 움직일까요?</span>
           </div>
-          {hashtags.length > 0 && (
+
+          {/* 섹터 탭 (인터랙티브) */}
+          {sectorKeys.length > 0 ? (
+            <div className="flex gap-2 flex-wrap">
+              {sectorKeys.map((sector, i) => (
+                <button
+                  key={sector}
+                  onClick={() => setActiveSector(i)}
+                  className={`text-[12px] font-semibold px-3 py-1.5 rounded-full transition-colors ${
+                    activeSector === i
+                      ? "bg-[color:var(--brand)] text-white"
+                      : "bg-muted text-foreground/70 hover:bg-muted/80"
+                  }`}
+                >
+                  {sector}
+                </button>
+              ))}
+            </div>
+          ) : hashtags.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {hashtags.map((tag) => (
                 <span key={tag} className="inline-flex items-center text-[12px] font-semibold px-2.5 py-1.5 rounded-full border bg-card text-foreground/80 border-border/60 whitespace-nowrap">{tag}</span>
               ))}
             </div>
-          )}
-          {relatedAssets.length > 0 && (
-            <p className="text-[12px] text-muted-foreground">이 이벤트와 직접적으로 연결된 섹터의 대표 자산을 모았어요.</p>
-          )}
+          ) : null}
+
+          {/* 섹터 택 설명 + 종목 수 */}
+          <p className="text-[12px] text-muted-foreground">
+            이 이벤트와 직접적으로 연결된 섹터의 대표 자산을 모았어요.
+            {totalCount > 0 && <span className="ml-1 text-[11px]">({totalCount}개 종목 분석)</span>}
+          </p>
+
+          {/* 섹터 필터링된 종목 리스트 */}
           <ul className="space-y-2">
-            {relatedAssets.map((asset) => (
-              <li key={asset.asset_name} className="flex items-center justify-between rounded-xl border border-border/60 bg-card p-3">
-                <div>
-                  <p className="text-[14px] font-semibold text-foreground">{asset.asset_name}</p>
-                  <p className="text-[12px] text-muted-foreground">
-                    {asset.asset_type && <span>{asset.asset_type}</span>}
-                    {asset.reason && <span> · {asset.reason}</span>}
-                  </p>
+            {(currentSectorAssets.length > 0 ? currentSectorAssets : impactedAssets.slice(0, 5)).map((asset: any) => (
+              <li key={asset.asset_name} className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-3.5 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13.5px] font-semibold text-foreground truncate">{asset.asset_name}</span>
+                    {asset.asset_type && (
+                      <span className="text-[10.5px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/60 shrink-0">{asset.asset_type}</span>
+                    )}
+                  </div>
+                  {asset.reason && (
+                    <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{asset.reason}</p>
+                  )}
                 </div>
                 {asset.holding && (
                   <span className="text-[11px] text-[color:var(--brand)] font-medium shrink-0">보유</span>

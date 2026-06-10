@@ -413,24 +413,64 @@ def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
         except Exception:
             pass
 
-    # 풍부한 enriched 필드 추출 (EventDetailDialog와 동일한 데이터 구조)
+    # enriched 필드 (EventDetailDialog와 동일 구조)
     ai_investment_view = target.get("ai_investment_view", "")
     detail_text = sections.get("detail", "")
-    causal_flow = sections.get("causal_flow", [])          # ["단계1", "단계2", "단계3"]
-    enriched_tag = sections.get("tag", "")                  # 헤더 배지
-    enriched_insights = sections.get("insights", [])        # [{"tag": ..., "body": ...}]
-    sector_impacts = sections.get("sector_impacts", [])     # [{"sector", "direction", "impact_pct"}]
+    causal_flow = sections.get("causal_flow", [])
+    enriched_tag = sections.get("tag", "")
+    enriched_insights = sections.get("insights", [])  # [{"tag": ..., "body": ...}]
+
+    # impacted_assets_json 파싱 (app_cache_news_feed에 이미 있음)
+    impacted_assets = []
+    raw_assets = target.get("impacted_assets_json")
+    if raw_assets:
+        try:
+            impacted_assets = _json.loads(raw_assets) if isinstance(raw_assets, str) else raw_assets
+        except Exception:
+            pass
+
+    # sector_impacts: 직접 영향 자산 기준 섹터별 집계 (EventDetailDialog 동일 로직)
+    _direct = [a for a in impacted_assets if a.get("relation_type") == "직접"]
+    _sg: dict = {}
+    for a in _direct:
+        _k = a.get("sector") or "기타"
+        if _k not in _sg:
+            _sg[_k] = []
+        _sg[_k].append(a)
+    sector_impacts = []
+    for _k, _sa in _sg.items():
+        _avg = sum(float(a.get("impact_score") or 0) for a in _sa) / len(_sa)
+        _pct = min(round(_avg * 100), 100)
+        _pos = sum(1 for a in _sa if a.get("impact_direction") == "긍정")
+        sector_impacts.append({
+            "sector": _k,
+            "direction": "긍정" if _pos >= len(_sa) / 2 else "부정",
+            "impact_pct": _pct,
+        })
 
     # hashtags: insights.tag
     hashtags = [ins["tag"] for ins in enriched_insights if ins.get("tag")]
 
-    # related_assets: short_reasons dict → list
-    related_assets = [
-        {"asset_name": k, "reason": v, "asset_type": ""}
-        for k, v in (sections.get("short_reasons") or {}).items()
-    ]
+    # related_assets: impacted_assets 우선, fallback short_reasons
+    if impacted_assets:
+        related_assets = [
+            {
+                "asset_name": a.get("asset_name", ""),
+                "asset_type": a.get("asset_type", ""),
+                "sector": a.get("sector", ""),
+                "reason": a.get("short_reason") or a.get("reason", ""),
+                "impact_direction": a.get("impact_direction", ""),
+                "relation_type": a.get("relation_type", ""),
+            }
+            for a in impacted_assets[:12]
+        ]
+    else:
+        related_assets = [
+            {"asset_name": k, "reason": v, "asset_type": ""}
+            for k, v in (sections.get("short_reasons") or {}).items()
+        ]
 
-    # why_notable: backward compat (detail + insights.body)
+    # why_notable: backward compat
     why_notable = []
     if detail_text:
         why_notable.append(detail_text)
@@ -448,6 +488,8 @@ def build_news_signal_detail(data: dict, news_title: str = "") -> dict:
         "causal_flow": causal_flow,
         "enriched_insights": enriched_insights,
         "sector_impacts": sector_impacts,
+        "impacted_assets": impacted_assets,
+        "total_asset_count": len(impacted_assets),
         "hashtags": hashtags,
         "related_assets": related_assets,
         "why_notable": why_notable,
