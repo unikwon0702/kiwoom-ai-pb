@@ -120,7 +120,7 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - expert_movement_detail: 고수 전체 움직임 (고수들 지금 어떻게 움직여, 투자고수 움직임, 고수 매매 흐름)
 - expert_type_detail: 특정 유형 고수 (공격형 고수, 장기형 고수, 금상 고수)
 - news_signal_summary: 의외의 신호 뉴스 리스트 (뉴스 알려줘, 지금 주목할 뉴스, 의외의 신호, 시장 뉴스 요약)
-- news_signal_detail: 특정 뉴스 상세 (뉴스 제목으로 상세 요청)
+- news_signal_detail: 특정 뉴스 상세 (뉴스 제목 단독 질문, 또는 뉴스 제목 + 알려줘/상세)
 - fallback: 위 어느 것에도 해당하지 않는 질문
 
 ## Rules
@@ -145,7 +145,7 @@ Respond ONLY with a JSON object: {"intent": "...", "confidence": 0.0~1.0}
 - "고수", "투자 고수" + 단독/전체 → expert_movement_detail
 - 특정 유형(공격형/장기형/금상) + "고수" → expert_type_detail
 - "뉴스 알려줘", "의외의 신호", "시장 뉴스 요약" → news_signal_summary
-- 뉴스 제목 + "알려줘/상세" → news_signal_detail
+- 뉴스 제목 그대로 단독 질문(뉴스 리스트 아이템 클릭) 또는 뉴스 제목 + "알려줘/상세" → news_signal_detail (market_event_detail과 동일 패턴)
 - 조회형 질문(확인, 보여줘, 얼마) vs 분석형 질문(진단, 분석) 구분 중요
 - "자산 유형별 비중과 평가금액 합계 확인" → portfolio_allocation_summary (NOT portfolio_diagnosis)
 - "손실 중인 종목 세부 현황" → holding_loss_detail (NOT portfolio_allocation_summary)

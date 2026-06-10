@@ -30,7 +30,7 @@ export function NewsSignalSummaryCard({ data, onItemClick }: Props) {
           data.news_items.map((item) => (
             <button
               key={item.news_id}
-              onClick={() => onItemClick(item.title)}
+              onClick={() => onItemClick(item.title + " 알려줘")}
               className="flex items-center justify-between p-3 rounded-xl bg-background hover:bg-muted transition-colors"
             >
               <div className="flex items-center gap-2 flex-1 min-w-0">
