@@ -414,12 +414,19 @@ function ChatPage() {
             const list = getSessionList(customer.id);
             const match = list.find(s => s.title === q);
             if (match) {
-              window.__AIPB_SID = match.id;
-              setMessages(
-                (loadSessionMessages(match.id) as Msg[]).map((m: Msg) =>
-                  m.role === "bot" ? { ...m, isStreaming: false, isThinking: false } as Msg : m
-                )
-              );
+              const loaded = loadSessionMessages(match.id) as Msg[];
+              if (loaded.length > 0) {
+                // 정상 로드: 기존 대화 표시
+                window.__AIPB_SID = match.id;
+                setMessages(
+                  loaded.map((m: Msg) =>
+                    m.role === "bot" ? { ...m, isStreaming: false, isThinking: false } as Msg : m
+                  )
+                );
+              } else {
+                // 데이터 유실: 해당 질문을 새로 전송
+                sendQuestion(q);
+              }
             } else {
               sendQuestion(q);
             }
