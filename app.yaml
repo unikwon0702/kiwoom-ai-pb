@@ -2,8 +2,6 @@ command: ['uvicorn', 'app:app', '--host', '0.0.0.0', '--port', '8000']
 env:
   - name: DATABRICKS_WAREHOUSE_ID
     value: '6fe05215efba4694'
-  - name: GENIE_SPACE_ID
-    value: '01f154dc46ca1cf6b865087a5f21ccf9'
   - name: APP_CACHE_SCHEMA
     value: 'dev.ai_pb_gold'
   - name: LLM_ROUTER_MODEL
@@ -11,10 +9,6 @@ env:
   - name: LLM_COMPOSER_MODEL
     value: 'databricks-gpt-5-4-mini'
 resources:
-  - name: genie-space
-    genie_space:
-      id: '01f154dc46ca1cf6b865087a5f21ccf9'
-      permission: CAN_MANAGE
   - name: sql-warehouse
     sql_warehouse:
       id: '6fe05215efba4694'

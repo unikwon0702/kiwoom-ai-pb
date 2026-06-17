@@ -55,8 +55,43 @@ export function loadSessionMessages(sessionId: string): any[] {
 
 export function saveSessionMessages(sessionId: string, messages: any[]): void {
   try {
-    localStorage.setItem(SD_PREFIX + sessionId, JSON.stringify(messages));
-  } catch { /* quota exceeded */ }
+    // 대용량 필드 제거하여 localStorage 용량 절약 (structured, card_data, tableData, sql)
+    const light = messages.map(m => {
+      if (m.role === "user") return m;
+      // bot 메시지: 렌더링에 필수인 필드만 보존
+      const { structured, card_data, tableData, sql, ...rest } = m;
+      return {
+        ...rest,
+        // card_type만 보존 (card_data 없이는 렌더링 안 됨 → 히스토리에서는 텍스트만 표시)
+        card_type: undefined,
+      };
+    });
+    const json = JSON.stringify(light);
+    // 500KB 초과 시 추가 경량화 (followUps, description 제거)
+    if (json.length > 500_000) {
+      const ultraLight = light.map((m: any) =>
+        m.role === "bot" ? { role: m.role, text: m.text, disclaimer: m.disclaimer } : m
+      );
+      localStorage.setItem(SD_PREFIX + sessionId, JSON.stringify(ultraLight));
+    } else {
+      localStorage.setItem(SD_PREFIX + sessionId, json);
+    }
+  } catch {
+    // quota exceeded: 오래된 세션 데이터 정리 후 재시도
+    try {
+      const keys = Object.keys(localStorage).filter(k => k.startsWith(SD_PREFIX));
+      if (keys.length > 5) {
+        // 가장 오래된 것부터 3개 삭제
+        keys.slice(0, 3).forEach(k => localStorage.removeItem(k));
+        const light = messages.map(m => {
+          if (m.role === "user") return m;
+          const { structured, card_data, tableData, sql, ...rest } = m;
+          return { ...rest, card_type: undefined };
+        });
+        localStorage.setItem(SD_PREFIX + sessionId, JSON.stringify(light));
+      }
+    } catch { /* 최종 실패 — 무시 */ }
+  }
 }
 
 export function addSession(customerId: string, title: string, sessionId: string): void {

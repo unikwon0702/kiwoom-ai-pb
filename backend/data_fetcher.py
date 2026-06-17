@@ -184,6 +184,50 @@ def fetch_all_parallel(customer_id: str, db: DBClient) -> dict:
 
 
 # ============================================================
+# 주가 시계열 조회 (차트용)
+# ============================================================
+
+PRICE_SCHEMA = "dev.scenario_sample_data_ce"
+
+def fetch_price_history(asset_name: str, db: DBClient, days: int = 30) -> list:
+    """
+    종목명으로 최근 N일 종가를 조회. 라인 차트 데이터 생성용.
+    
+    Returns:
+        list of dict: [{"name": "06/01", "value": 322000}, ...]
+    """
+    try:
+        sql = f"""
+            SELECT trade_date, close_price
+            FROM {PRICE_SCHEMA}.daily_stock_price
+            WHERE asset_name = '{asset_name}'
+            ORDER BY trade_date DESC
+            LIMIT {days}
+        """
+        rows = db._execute(sql)
+        if not rows:
+            return []
+        
+        # 날짜 오름차순 정렬 + 차트 데이터 형식으로 변환
+        rows.sort(key=lambda r: str(r.get("trade_date", "")))
+        chart_data = []
+        for r in rows:
+            date_str = str(r.get("trade_date", ""))
+            if len(date_str) >= 10:
+                label = date_str[5:10].replace("-", "/")  # "06/01" 형식
+            else:
+                label = date_str
+            chart_data.append({
+                "name": label,
+                "value": int(float(r.get("close_price", 0)))
+            })
+        return chart_data
+    except Exception as e:
+        logger.warning(f"[PRICE_FETCH] {asset_name} failed: {e}")
+        return []
+
+
+# ============================================================
 # Card Data Builders (Phase 2)
 # ============================================================
 
